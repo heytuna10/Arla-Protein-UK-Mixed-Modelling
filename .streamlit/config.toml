@@ -1,0 +1,10 @@
+# Look of the dashboard (app/dashboard.py); also read by Streamlit Community Cloud.
+[theme]
+base = "light"
+primaryColor = "#2a78d6"
+backgroundColor = "#fcfcfb"
+secondaryBackgroundColor = "#f1f0ec"
+textColor = "#0b0b0b"
+
+[browser]
+gatherUsageStats = false

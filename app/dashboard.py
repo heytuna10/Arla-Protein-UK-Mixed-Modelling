@@ -3,14 +3,23 @@
 Run from the repo root:  streamlit run app/dashboard.py
 
 The app holds no model logic. Everything it shows comes from arla_mmm.interface
-(docs/part2/INTERFACE.md): baseline_plan, scale_plan, gain_range and the Forecast objects.
+(docs/part2/INTERFACE.md): baseline_plan, scale_plan, shift_budget, gain_range, profit_view,
+profit_gain and the Forecast objects.
 """
+
+import sys
+from pathlib import Path
 
 import altair as alt
 import pandas as pd
 import streamlit as st
 
-from arla_mmm.interface import baseline_plan, gain_range, load_model, scale_plan
+try:
+    import arla_mmm  # noqa: F401
+except ModuleNotFoundError:      # not installed with `pip install -e .` (e.g. Streamlit Community Cloud)
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from arla_mmm.interface import baseline_plan, gain_range, load_model, profit_gain, profit_view, scale_plan, shift_budget
 
 CHANNELS = {  # interface column -> name shown to the user
     "tv": "TV",
@@ -21,11 +30,12 @@ CHANNELS = {  # interface column -> name shown to the user
 }
 PRICE_COL, PROMO_COL, WEEK_COL = "Shelf price", "Promotion (% off)", "Week starting"
 BASELINE = "Current plan"
-# Starting points for the scenarios: % change of each channel's weekly spend against the current plan.
+# Starting points for the scenarios: % change of each channel's weekly spend against the current plan,
+# and a budget move (from, to, % of the source channel's budget).
 DEFAULTS = [
-    ("Shift to digital", {"tv": -10, "instagram": 10, "tiktok": 10, "influencer": 10}),
-    ("TV to influencers", {"tv": -10, "influencer": 30}),      # the codebook's example: 10% of the TV budget
-    ("Scenario C", {}),
+    ("Shift to digital", {"tv": -10, "instagram": 10, "tiktok": 10, "influencer": 10}, ("tv", "influencer", 0)),
+    ("TV to influencers", {}, ("tv", "influencer", 10)),        # the codebook's example
+    ("Scenario C", {}, ("tv", "influencer", 0)),
 ]
 COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]         # current plan first, then the scenarios in order
 
@@ -70,6 +80,12 @@ def pct(x: float) -> str:
     return f"{'−' if x < 0 else '+'}{abs(x):.0f}%"
 
 
+def money_range(low: float, high: float) -> str:
+    if abs(low) < 500 and abs(high) < 500:
+        return "no change"
+    return f"{money(low, signed=True)} to {money(high, signed=True)}"
+
+
 def with_range(row, prefix: str, fmt) -> str:
     return f"{fmt(row[prefix + '_p50'])}  ({fmt(row[prefix + '_p5'])} to {fmt(row[prefix + '_p95'])})"
 
@@ -83,9 +99,11 @@ def plain_warning(sentence: str) -> str:
 
 # ------------------------------------------------------------------ inputs
 
-def reset_scenario(i: int, shelf_price: float) -> None:
+def set_scenario(i: int, shelf_price: float, move: int = 0) -> None:
+    """Button callback: back to the current plan (move=0) or to the codebook example (move=10)."""
     for ch in CHANNELS:
         st.session_state[f"s{i}_{ch}"] = 0
+    st.session_state[f"s{i}_from"], st.session_state[f"s{i}_to"], st.session_state[f"s{i}_move"] = "tv", "influencer", move
     st.session_state[f"s{i}_price"] = shelf_price
     st.session_state[f"s{i}_version"] = st.session_state.get(f"s{i}_version", 0) + 1     # drops the week edits
 
@@ -127,18 +145,22 @@ TABLE_CONFIG = {
 
 
 def scenario_inputs(i: int, base: pd.DataFrame, weeks: int) -> pd.DataFrame:
-    default_name, default_pct = DEFAULTS[i]
+    default_name, default_pct, default_move = DEFAULTS[i]
     shelf_price = float(base["regular_price"].iloc[0])
     for ch in CHANNELS:
         st.session_state.setdefault(f"s{i}_{ch}", default_pct.get(ch, 0))
+    for key, value in zip(("from", "to", "move"), default_move):
+        st.session_state.setdefault(f"s{i}_{key}", value)
     st.session_state.setdefault(f"s{i}_price", shelf_price)
 
-    top = st.columns([3, 1])
+    top = st.columns([3, 2, 1.4])
     top[0].text_input("Scenario name", value=default_name, key=f"s{i}_name")
-    top[1].button("Reset to current plan", key=f"s{i}_reset", on_click=reset_scenario, args=(i, shelf_price),
+    top[1].button("Example: move 10% of TV to influencers", key=f"s{i}_example", on_click=set_scenario,
+                  args=(i, shelf_price, 10), width="stretch", help="The example from the project brief.")
+    top[2].button("Reset to current plan", key=f"s{i}_reset", on_click=set_scenario, args=(i, shelf_price),
                   width="stretch")
 
-    st.markdown("**1. Change the weekly spend of a channel** (% against the current plan, every week)")
+    st.markdown("**1. Spend more or less on a channel** (% against the current plan, every week)")
     cols = st.columns(len(CHANNELS))
     factors = {}
     for col, (ch, label) in zip(cols, CHANNELS.items()):
@@ -146,13 +168,28 @@ def scenario_inputs(i: int, base: pd.DataFrame, weeks: int) -> pd.DataFrame:
         factors[ch] = 1 + change / 100
     plan = scale_plan(base, factors)
 
-    st.markdown("**2. Shelf price** (the price without a promotion)")
+    st.markdown("**2. Move budget from one channel to another** (total budget stays the same)")
+    cols = st.columns([1, 1, 2])
+    source = cols[0].selectbox("Take from", list(CHANNELS), format_func=CHANNELS.get, key=f"s{i}_from")
+    target = cols[1].selectbox("Give to", list(CHANNELS), format_func=CHANNELS.get, key=f"s{i}_to")
+    share = cols[2].slider(f"Share of the {CHANNELS[source]} budget to move", min_value=0, max_value=50, step=1,
+                           format="%d%%", key=f"s{i}_move")
+    if share > 0:
+        try:
+            moved = share / 100 * plan[source].sum()
+            plan = shift_budget(plan, source, target, share / 100)
+            st.caption(f"Moves **{money(moved)}** from {CHANNELS[source]} to {CHANNELS[target]}, spread over the weeks "
+                       "in proportion to each channel's spend.")
+        except ValueError as err:
+            st.warning(f"Nothing was moved: {err}.")
+
+    st.markdown("**3. Shelf price** (the price without a promotion)")
     plan["regular_price"] = st.number_input(
         "Shelf price (£ per unit)", min_value=0.5, max_value=5.0, step=0.01, format="%.2f", key=f"s{i}_price",
         label_visibility="collapsed")
 
-    st.markdown("**3. Edit single weeks**: spend, shelf price, and promotion weeks. "
-                "A cell you edit keeps your value even if you move a slider afterwards.")
+    st.markdown("**4. Edit single weeks**: spend, shelf price, and promotion weeks. "
+                "A cell you edit keeps your value even if you change the controls above afterwards.")
     version = st.session_state.get(f"s{i}_version", 0)
     edited = st.data_editor(week_table(plan), key=f"s{i}_weeks_{weeks}_{version}", hide_index=True, num_rows="fixed",
                             disabled=[WEEK_COL], column_config=TABLE_CONFIG, width="stretch", height=table_height(weeks))
@@ -170,6 +207,12 @@ def scenario_inputs(i: int, base: pd.DataFrame, weeks: int) -> pd.DataFrame:
 
 # ------------------------------------------------------------------ charts
 
+def scenario_color(colors: dict, legend: bool = True) -> alt.Color:
+    return alt.Color("scenario:N", title=None, sort=list(colors),
+                     scale=alt.Scale(domain=list(colors), range=list(colors.values())),
+                     legend=alt.Legend(orient="top", symbolOpacity=1) if legend else None)
+
+
 def weekly_chart(forecasts: dict, measure: str, bands: bool, colors: dict) -> alt.Chart:
     data = pd.concat([
         fc.weekly[["week_beg", f"{measure}_p5", f"{measure}_p50", f"{measure}_p95"]]
@@ -177,22 +220,84 @@ def weekly_chart(forecasts: dict, measure: str, bands: bool, colors: dict) -> al
         for name, fc in forecasts.items()], ignore_index=True)
     title = "Revenue per week (£)" if measure == "revenue" else "Units sold per week"
     unit = " (£)" if measure == "revenue" else ""
-    color = alt.Color("scenario:N", title=None, sort=list(colors),
-                      scale=alt.Scale(domain=list(colors), range=list(colors.values())),
-                      legend=alt.Legend(orient="top"))
     base = alt.Chart(data).encode(x=alt.X("week:T", title=None, axis=alt.Axis(format="%d %b", grid=False)))
     tooltip = [alt.Tooltip("scenario:N", title="Scenario"), alt.Tooltip("week:T", title="Week starting", format="%d %b %Y"),
                alt.Tooltip("likely:Q", title=f"Most likely{unit}", format=",.0f"),
                alt.Tooltip("low:Q", title=f"Low, 5%{unit}", format=",.0f"),
                alt.Tooltip("high:Q", title=f"High, 95%{unit}", format=",.0f")]
     y = alt.Y("likely:Q", title=title, scale=alt.Scale(zero=False), axis=alt.Axis(format="~s"))
+    hover = alt.selection_point(fields=["week"], nearest=True, on="pointerover", clear="pointerout", empty=False)
     layers = []
     if bands:
         layers.append(base.mark_area(opacity=0.13).encode(y=alt.Y("low:Q", title=title), y2="high:Q",
-                                                          color=color.copy().legend(None)))
-    layers.append(base.mark_line(strokeWidth=2).encode(y=y, color=color))
-    layers.append(base.mark_point(size=70, filled=True, opacity=1).encode(y=y, color=color, tooltip=tooltip))
-    return alt.layer(*layers).properties(height=360)
+                                                          color=scenario_color(colors)))
+    layers.append(base.mark_rule(color="#8a8984", strokeDash=[3, 3]).encode(opacity=alt.condition(hover, alt.value(1), alt.value(0))))
+    layers.append(base.mark_line(strokeWidth=2.5, interpolate="monotone").encode(y=y, color=scenario_color(colors)))
+    layers.append(base.mark_point(filled=True, opacity=1, stroke="white", strokeWidth=1.5).encode(
+        y=y, color=scenario_color(colors), tooltip=tooltip,
+        size=alt.condition(hover, alt.value(110), alt.value(28))).add_params(hover))
+    return alt.layer(*layers).properties(height=380)
+
+
+def gain_chart(gains: pd.DataFrame, names: list[str], colors: dict) -> alt.Chart:
+    """One bar per scenario from the study-sized gain (ring) to the gain as measured (dot)."""
+    data = pd.DataFrame({"scenario": names,
+                         "low": gains.loc[names, "delta_revenue_pct_low"].to_numpy(),
+                         "high": gains.loc[names, "delta_revenue_pct_high"].to_numpy(),
+                         "studies": gains.loc[names, "delta_revenue_pct_benchmark"].to_numpy(),
+                         "measured": gains.loc[names, "delta_revenue_pct_model"].to_numpy()})
+    color = alt.Color("scenario:N", legend=None, scale=alt.Scale(domain=list(colors), range=list(colors.values())))
+    tooltip = [alt.Tooltip("scenario:N", title="Scenario"),
+               alt.Tooltip("studies:Q", title="If advertising works as studies find (%)", format="+.1f"),
+               alt.Tooltip("measured:Q", title="If it works as our model measured (%)", format="+.1f")]
+    base = alt.Chart(data).encode(
+        y=alt.Y("scenario:N", title=None, sort=names, scale=alt.Scale(paddingInner=0.5),
+                axis=alt.Axis(labelLimit=220, ticks=False, domain=False, labelPadding=10, labelFontSize=13)),
+        color=color, tooltip=tooltip)
+    x = alt.X("low:Q", title="Revenue against the current plan (%)", axis=alt.Axis(format="+.0f", tickCount=8))
+    bar = base.mark_bar(height=8, cornerRadius=4, opacity=0.4).encode(x=x, x2="high:Q")
+    ring = base.mark_point(size=190, fill="white", opacity=1, strokeWidth=3).encode(x="studies:Q")
+    dot = base.mark_point(size=190, filled=True, opacity=1).encode(x="measured:Q")
+    return (bar + ring + dot).properties(height=alt.Step(46))
+
+
+def profit_chart(profits: dict, colors: dict) -> alt.Chart:
+    rows = []
+    for name, (_, ch) in profits.items():
+        for key, label in CHANNELS.items():
+            rows.append({"scenario": name, "channel": label, "profit": ch.loc[key, "incremental_profit_p50"],
+                         "low": ch.loc[key, "incremental_profit_p5"], "high": ch.loc[key, "incremental_profit_p95"]})
+    data = pd.DataFrame(rows)
+    order = list(colors)
+    x = alt.X("channel:N", title=None, sort=list(CHANNELS.values()), axis=alt.Axis(labelAngle=0))
+    offset = alt.XOffset("scenario:N", sort=order)
+    tooltip = [alt.Tooltip("scenario:N", title="Scenario"), alt.Tooltip("channel:N", title="Channel"),
+               alt.Tooltip("profit:Q", title="Profit added (£)", format=",.0f"),
+               alt.Tooltip("low:Q", title="Low, 5% (£)", format=",.0f"), alt.Tooltip("high:Q", title="High, 95% (£)", format=",.0f")]
+    bars = alt.Chart(data).mark_bar(cornerRadius=3).encode(
+        x=x, xOffset=offset, y=alt.Y("profit:Q", title="Profit added over the period (£)", axis=alt.Axis(format="~s")),
+        color=scenario_color(colors), tooltip=tooltip)
+    whiskers = alt.Chart(data).mark_rule(color="#52514e", strokeWidth=1.5).encode(x=x, xOffset=offset, y="low:Q", y2="high:Q", tooltip=tooltip)
+    zero = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color="#52514e").encode(y="y:Q")
+    return (bars + whiskers + zero).properties(height=340)
+
+
+def breakeven_chart(profits: dict, margin: float, colors: dict) -> alt.Chart:
+    rows = [{"scenario": name, "channel": label, "breakeven": ch.loc[key, "breakeven_margin"] * 100}
+            for name, (_, ch) in profits.items() for key, label in CHANNELS.items()]
+    data = pd.DataFrame(rows)
+    top = max(100.0, data["breakeven"].max() * 1.05)
+    y = alt.Y("channel:N", title=None, sort=list(CHANNELS.values()), axis=alt.Axis(labelLimit=200, ticks=False, domain=False, labelPadding=8))
+    x = alt.X("breakeven:Q", title="Margin needed for the channel to pay for itself (%)", scale=alt.Scale(domain=[0, top]), axis=alt.Axis(tickCount=10))
+    dots = alt.Chart(data).mark_point(size=130, filled=True, opacity=0.95, stroke="white", strokeWidth=1.5).encode(
+        y=y, x=x, color=scenario_color(colors),
+        tooltip=[alt.Tooltip("scenario:N", title="Scenario"), alt.Tooltip("channel:N", title="Channel"),
+                 alt.Tooltip("breakeven:Q", title="Break-even margin (%)", format=".0f")])
+    line = alt.Chart(pd.DataFrame({"x": [margin * 100], "label": [f"Assumed margin {margin:.0%}"]}))
+    rule = line.mark_rule(color="#0b0b0b", strokeWidth=1.5, strokeDash=[5, 4]).encode(x="x:Q")
+    text = line.mark_text(align="left", dx=6, dy=-4, baseline="top", color="#0b0b0b", fontWeight=600).encode(
+        x="x:Q", y=alt.value(0), text="label:N")
+    return (rule + dots + text).properties(height=alt.Step(42))
 
 
 def channel_chart(forecasts: dict, colors: dict) -> alt.Chart:
@@ -211,9 +316,7 @@ def channel_chart(forecasts: dict, colors: dict) -> alt.Chart:
                alt.Tooltip("low:Q", title="Low, 5% (£)", format=",.0f"), alt.Tooltip("high:Q", title="High, 95% (£)", format=",.0f")]
     bars = alt.Chart(data).mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
         x=x, xOffset=offset, y=alt.Y("added:Q", title="Revenue added over the period (£)", axis=alt.Axis(format="~s")),
-        color=alt.Color("scenario:N", title=None, sort=order, legend=alt.Legend(orient="top"),
-                        scale=alt.Scale(domain=order, range=list(colors.values()))),
-        tooltip=tooltip)
+        color=scenario_color(colors), tooltip=tooltip)
     whiskers = alt.Chart(data).mark_rule(color="#52514e", strokeWidth=1.5).encode(
         x=x, xOffset=offset, y="low:Q", y2="high:Q", tooltip=tooltip)
     return (bars + whiskers).properties(height=360)
@@ -240,6 +343,32 @@ st.markdown(
     f"Set the weekly advertising spend, shelf price and promotion weeks for the next **{weeks} weeks** and compare "
     "the result with the current plan. The **current plan** repeats the spend and promotions of the same weeks a "
     "year ago at today's shelf price.")
+
+with st.expander("How to use this tool, and what it cannot tell you", icon="📖"):
+    how, read, limits = st.columns(3)
+    how.markdown(
+        "**What you set**\n"
+        "- **Weekly spend per channel** in £: TV, Instagram, TikTok, influencers and in-store promotion.\n"
+        "- **Shelf price**: the price on the shelf when there is no promotion.\n"
+        "- **Price promotions**: in which weeks, and how many % off.\n\n"
+        "Each scenario starts from the current plan. Change a channel for all weeks, move budget from one channel "
+        "to another, or edit single weeks in the table.")
+    read.markdown(
+        "**How to read the results**\n"
+        "- **Low, most likely, high.** Sales are never certain. Nine times out of ten the result should land "
+        "between low and high.\n"
+        "- **The gain is a range**, for example +4% to +28%. One end assumes advertising works as well as "
+        "published studies find, the other as well as our model measured on Arla's data. Plan with the lower "
+        "figure and treat the higher one as the upside.\n"
+        "- **Revenue per £** is revenue, not profit. The Profit tab applies a margin you choose.")
+    limits.markdown(
+        "**Warnings and limits**\n"
+        "- 🚨 **Red**: the scenario holds a spend level for months that the brand has never held. The tool still "
+        "shows numbers, but **they are not a forecast**.\n"
+        "- ⚠️ **Yellow**: single weeks, a price or a discount are outside what the data contain. Read with care.\n"
+        "- The model learned from three years of Arla's own data. It shows the direction and ranking of the "
+        "channels reliably; the size of a gain should be tested in the market before the budget is moved for good.\n"
+        "- Growth and seasonal patterns are assumed to continue as in 2022 to 2024.")
 
 st.header("Your scenarios")
 names = []
@@ -294,74 +423,107 @@ for col, name in zip(st.columns(n_scenarios), names):
         unchanged = max(abs(g["delta_revenue_pct_low"]), abs(g["delta_revenue_pct_high"])) < 0.5
         st.metric(f"{name}{mark}", "No change" if unchanged else
                   f"{pct(g['delta_revenue_pct_low'])} to {pct(g['delta_revenue_pct_high'])}")
-        st.markdown(f"{money(g['delta_revenue_low'], signed=True)} to {money(g['delta_revenue_high'], signed=True)} "
-                    f"over {weeks} weeks  \nAdvertising budget: {money(table.loc[name, 'delta_spend'], signed=True)}")
-        st.caption(f"With study-sized effects: {pct(g['delta_revenue_pct_benchmark'])}. "
-                   f"As our model measured them: {pct(g['delta_revenue_pct_model'])}.")
+        st.markdown(f"{money_range(g['delta_revenue_low'], g['delta_revenue_high']).capitalize()} over {weeks} weeks  \n"
+                    f"Advertising budget: {money(g['delta_spend'], signed=True) if abs(g['delta_spend']) >= 500 else 'unchanged'}")
         if flagged.get(name):
-            st.caption("Outside past spend levels: treat as a what-if, not a forecast.")
+            st.caption("Outside past spend levels: a what-if, not a forecast.")
+st.altair_chart(gain_chart(gains, names, colors), width="stretch")
+st.caption("○ if advertising works as published studies find  ·  ● if it works as our model measured")
 
-# ---- totals with bands
-st.subheader(f"Totals over {weeks} weeks")
-summary = pd.DataFrame({
-    "Scenario": [f"{n} 🚨" if flagged.get(n) else n for n in table.index],
-    "Advertising budget": [money(v) for v in table["media_spend"]],
-    "Units sold": [with_range(r, "units", count) for _, r in table.iterrows()],
-    "Revenue": [with_range(r, "revenue", money) for _, r in table.iterrows()],
-    "Revenue per £ of advertising": [with_range(r, "media_roi", lambda v: f"£{v:.1f}") for _, r in table.iterrows()],
-})
-st.dataframe(summary, hide_index=True, width="stretch")
-st.caption("Each cell: most likely value (low to high). Nine times out of ten the result should fall between low and "
-           "high, if the model's measured effects are right. *Revenue per £ of advertising* is the revenue all "
-           "channels add together, divided by what is spent above the minimum level the brand has always kept. "
-           "It is revenue, not profit.")
+tab_totals, tab_channels, tab_profit, tab_numbers = st.tabs(["Sales and revenue", "Channels", "Profit", "Weekly numbers"])
 
-# ---- week by week
-st.subheader("Week by week")
-measure = st.radio("Show", ["Revenue", "Units sold"], horizontal=True, label_visibility="collapsed")
-st.altair_chart(weekly_chart(forecasts, "revenue" if measure == "Revenue" else "units", bands, colors), width="stretch")
-st.caption("Lines: most likely value. Shaded area: the range from low (5%) to high (95%).")
+# ---- totals with bands, week by week
+with tab_totals:
+    st.subheader(f"Totals over {weeks} weeks")
+    summary = pd.DataFrame({
+        "Scenario": [f"{n} 🚨" if flagged.get(n) else n for n in table.index],
+        "Advertising budget": [money(v) for v in table["media_spend"]],
+        "Units sold": [with_range(r, "units", count) for _, r in table.iterrows()],
+        "Revenue": [with_range(r, "revenue", money) for _, r in table.iterrows()],
+        "Revenue per £ of advertising": [with_range(r, "media_roi", lambda v: f"£{v:.1f}") for _, r in table.iterrows()],
+    })
+    st.dataframe(summary, hide_index=True, width="stretch")
+    st.caption("Each cell: most likely value (low to high), with advertising effects as our model measured them. "
+               "*Revenue per £ of advertising* is the revenue all channels add together, divided by what is spent "
+               "above the minimum level the brand has always kept. It is revenue, not profit.")
+
+    st.subheader("Week by week")
+    measure = st.radio("Show", ["Revenue", "Units sold"], horizontal=True, label_visibility="collapsed")
+    st.altair_chart(weekly_chart(forecasts, "revenue" if measure == "Revenue" else "units", bands, colors), width="stretch")
+    st.caption("Lines: most likely value. Shaded area: the range from low to high.")
 
 # ---- channels
-st.subheader("What each channel adds")
-st.altair_chart(channel_chart(forecasts, colors), width="stretch")
-st.caption("Bars: revenue the channel adds over the period. Thin lines: low to high. TV is measured against no TV; "
-           "the other channels against the lowest weekly spend the brand has ever had, because they were never "
-           "switched off.")
+with tab_channels:
+    st.subheader("What each channel adds")
+    st.altair_chart(channel_chart(forecasts, colors), width="stretch")
+    st.caption("Bars: revenue the channel adds over the period. Thin lines: low to high. TV is measured against no "
+               "TV; the other channels against the lowest weekly spend the brand has ever had, because they were "
+               "never switched off.")
 
-st.markdown("**Revenue per £ spent on the channel** (most likely, low to high)")
-roi = pd.DataFrame({"Channel": list(CHANNELS.values())})
-for name, fc in forecasts.items():
-    roi[name] = [with_range(fc.channels.loc[ch], "roi", lambda v: f"£{v:.1f}") for ch in CHANNELS]
-st.dataframe(roi, hide_index=True, width="stretch")
-st.caption("Counted on the spend above the channel's minimum level (for TV: on all TV spend).")
+    st.markdown("**Revenue per £ spent on the channel** (most likely, low to high)")
+    roi = pd.DataFrame({"Channel": list(CHANNELS.values())})
+    for name, fc in forecasts.items():
+        roi[name] = [with_range(fc.channels.loc[ch], "roi", lambda v: f"£{v:.1f}") for ch in CHANNELS]
+    st.dataframe(roi, hide_index=True, width="stretch")
+    note = "Counted on the spend above the channel's minimum level (for TV: on all TV spend)."
+    ch0 = forecasts[BASELINE].channels
+    moved = [(CHANNELS[ch], name) for name in names for ch in CHANNELS
+             if abs(forecasts[name].channels.loc[ch, "spend"] - ch0.loc[ch, "spend"]) < 1
+             and abs(forecasts[name].channels.loc[ch, "roi_mean"] / ch0.loc[ch, "roi_mean"] - 1) > 0.02]
+    if moved:
+        note += (f" Why does the return of {moved[0][0]} change in *{moved[0][1]}* although its spend does not? In the "
+                 "model the channels reinforce each other: when one channel lifts sales, every £ on the others works "
+                 "on a larger base.")
+    st.caption(note)
 
-st.markdown("**Where the revenue comes from**")
-source = pd.DataFrame({"Source": ["Base sales"] + list(CHANNELS.values())})
-for name, fc in forecasts.items():
-    by = fc.contributions.groupby("component")["revenue_mean"].sum()
-    source[name] = [money(by[c]) for c in ["base"] + list(CHANNELS)]
-st.dataframe(source, hide_index=True, width="stretch")
-st.caption("Base sales: what would be sold with every channel at its minimum level. Includes growth, season, price, "
-           "promotions and the after-effect of earlier advertising.")
+    st.markdown("**Where the revenue comes from**")
+    source = pd.DataFrame({"Source": ["Base sales"] + list(CHANNELS.values())})
+    for name, fc in forecasts.items():
+        by = fc.contributions.groupby("component")["revenue_mean"].sum()
+        source[name] = [money(by[c]) for c in ["base"] + list(CHANNELS)]
+    st.dataframe(source, hide_index=True, width="stretch")
+    st.caption("Base sales: what would be sold with every channel at its minimum level. Includes growth, season, "
+               "price, promotions and the after-effect of earlier advertising.")
+
+# ---- profit at an assumed margin
+with tab_profit:
+    st.subheader("Profit at an assumed margin")
+    margin = st.slider("Gross margin: an assumption, not a number from the data", min_value=5, max_value=60, value=20,
+                       step=1, format="%d%%", help="The share of revenue left after the cost of making and delivering "
+                       "the product. Arla's real margin is not in our data, so set the one you believe.") / 100
+    profits = {name: profit_view(fc, margin) for name, fc in forecasts.items()}
+    pgain = profit_gain(gains, margin)
+    st.dataframe(pd.DataFrame({
+        "Scenario": [f"{n} 🚨" if flagged.get(n) else n for n in profits],
+        "Advertising budget": [money(t["media_spend"]) for t, _ in profits.values()],
+        "Profit after advertising": [with_range(t, "profit_after_media", money) for t, _ in profits.values()],
+        "Against the current plan": ["" if n == BASELINE else money_range(pgain.loc[n, "delta_profit_low"], pgain.loc[n, "delta_profit_high"])
+                                     for n in profits],
+    }), hide_index=True, width="stretch")
+    st.caption(f"Profit after advertising = {margin:.0%} of revenue minus the advertising budget; other costs are not "
+               "in the data. Cells show most likely (low to high). *Against the current plan* is a range for the "
+               "same reason as the revenue gain.")
+
+    st.markdown("**Does each channel pay for itself?**")
+    st.altair_chart(breakeven_chart(profits, margin, colors), width="stretch")
+    st.caption("Each dot is the margin a channel needs to earn back its own spend. Dots left of the dashed line pay "
+               "for themselves at the assumed margin; dots right of it do not. Where the dots sit does not depend "
+               "on the margin you choose.")
+    st.altair_chart(profit_chart(profits, colors), width="stretch")
+    st.caption(f"Profit a channel adds = {margin:.0%} of the revenue it adds minus its spend above the minimum level. "
+               "Bars below zero cost more than they bring in at this margin. Thin lines: low to high.")
+    be = pd.DataFrame({"Channel": list(CHANNELS.values())})
+    for name, (_, ch) in profits.items():
+        be[name] = [f"{ch.loc[c, 'breakeven_margin']:.0%}  ({'pays back' if ch.loc[c, 'pays_back'] else 'does not pay back'})"
+                    for c in CHANNELS]
+    st.markdown("**Margin needed to break even**")
+    st.dataframe(be, hide_index=True, width="stretch")
 
 # ---- details
-with st.expander("Weekly numbers (table and download)"):
+with tab_numbers:
     weekly = pd.concat([
         fc.weekly.assign(scenario=name, week_beg=fc.weekly["week_beg"].dt.date)
         [["scenario", "week_beg", *CHANNELS, "regular_price", "promo_discount", "units_p5", "units_p50", "units_p95",
           "revenue_p5", "revenue_p50", "revenue_p95"]] for name, fc in forecasts.items()], ignore_index=True)
     st.dataframe(weekly.round(2), hide_index=True, width="stretch")
     st.download_button("Download as CSV", weekly.to_csv(index=False), file_name="arla_scenarios_weekly.csv", mime="text/csv")
-
-with st.expander("What these numbers can and cannot tell you"):
-    st.markdown(
-        "- **Direction yes, size to be tested.** The ranking of the channels is stable; the size of the social and "
-        "influencer effects is far above what published studies find. That is why gains are shown as a range.\n"
-        "- **The red warning matters most.** The model has only seen spend levels the brand actually held. Beyond "
-        "them it still produces numbers, and they are not evidence.\n"
-        "- **Revenue, not profit.** Margin is not in the data.\n"
-        "- **Price promotions sell more units and bring in less revenue** at every discount in the data.\n"
-        "- **Low to high covers** normal week-to-week swings and how precisely the effects are measured. It does not "
-        "cover the risk of leaving past spend levels.\n"
-        "- **Growth and season are assumed to continue** as in the last three years.")

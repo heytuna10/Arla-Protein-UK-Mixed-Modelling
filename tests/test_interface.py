@@ -7,7 +7,7 @@ from arla_mmm.engine import simulate
 from arla_mmm.features import promo_depth, regular_price
 from arla_mmm.final import final_model
 from arla_mmm.interface import (MODEL_PATH, baseline_plan, check_range, compare_scenarios, fit_model, forecast,
-                                gain_range, load_model, save_model, scale_plan, shift_budget)
+                                gain_range, load_model, profit_gain, profit_view, save_model, scale_plan, shift_budget)
 
 
 @pytest.fixture(scope="module")
@@ -146,3 +146,52 @@ def test_gain_range(model, base):
     assert lit.loc["more tv", "delta_revenue_pct"] > est.loc["more tv", "delta_revenue_pct"]
     assert rng.loc["more tv", "delta_revenue_pct_high"] == pytest.approx(lit.loc["more tv", "delta_revenue_pct"])
     assert (rng["delta_revenue_low"] <= rng["delta_revenue_high"]).all()
+
+
+def test_shift_budget_is_exact_and_validated(base):
+    moved = shift_budget(base, "tv", "influencer", 0.10)
+    assert moved[CHANNELS].sum().sum() == pytest.approx(base[CHANNELS].sum().sum())
+    assert moved["tv"].sum() == pytest.approx(0.9 * base["tv"].sum())
+    assert moved["influencer"].sum() == pytest.approx(base["influencer"].sum() + 0.1 * base["tv"].sum())
+    with pytest.raises(ValueError, match="different"):
+        shift_budget(base, "tv", "tv", 0.1)
+    with pytest.raises(ValueError, match="unknown channel"):
+        shift_budget(base, "tv", "radio", 0.1)
+    with pytest.raises(ValueError, match="share"):
+        shift_budget(base, "tv", "influencer", 10)
+    with pytest.raises(ValueError, match="no spend"):
+        shift_budget(base.assign(tv=0.0), "influencer", "tv", 0.1)
+
+
+def test_profit_view(model, base):
+    fc = forecast(model, base)
+    totals, ch = profit_view(fc, 0.20)
+    assert totals["profit_after_media_mean"] == pytest.approx(0.2 * fc.totals["revenue_mean"] - fc.totals["media_spend"])
+    assert totals["profit_after_media_p5"] < totals["profit_after_media_p50"] < totals["profit_after_media_p95"]
+    np.testing.assert_allclose(ch["breakeven_margin"], 1 / fc.channels["roi_mean"])
+    np.testing.assert_allclose(ch["incremental_profit_mean"],
+                               0.2 * fc.channels["incremental_revenue_mean"] - fc.channels["spend_above_reference"])
+    # at the break-even margin a channel earns exactly nothing; TV needs far more than 20%, influencers far less
+    _, at_be = profit_view(fc, float(ch.loc["influencer", "breakeven_margin"]))
+    assert at_be.loc["influencer", "incremental_profit_mean"] == pytest.approx(0, abs=1e-6)
+    assert not ch.loc["tv", "pays_back"] and ch.loc["influencer", "pays_back"]
+    assert ch.loc["tv", "incremental_profit_mean"] < 0 < ch.loc["influencer", "incremental_profit_mean"]
+    assert _breakeven_is_margin_free(fc)
+    with pytest.raises(ValueError, match="margin"):
+        profit_view(fc, 20)
+
+
+def _breakeven_is_margin_free(fc):
+    return np.allclose(profit_view(fc, 0.2)[1]["breakeven_margin"], profit_view(fc, 0.4)[1]["breakeven_margin"])
+
+
+def test_profit_gain(model, base):
+    plans = {"current": base, "more": scale_plan(base, {"pos_promotion": 1.2}), "shift": shift_budget(base, "tv", "influencer", 0.1)}
+    gains, _ = gain_range(model, plans, baseline="current")
+    pg = profit_gain(gains, 0.25)
+    assert (pg.loc["current"] == 0).all()
+    assert gains.loc["more", "delta_spend"] == pytest.approx(0.2 * base["pos_promotion"].sum())
+    assert pg.loc["more", "delta_profit_model"] == pytest.approx(
+        0.25 * gains.loc["more", "delta_revenue_model"] - gains.loc["more", "delta_spend"])
+    assert pg.loc["shift", "delta_profit_low"] == pytest.approx(0.25 * gains.loc["shift", "delta_revenue_low"])   # budget unchanged
+    assert (pg["delta_profit_low"] <= pg["delta_profit_high"]).all()

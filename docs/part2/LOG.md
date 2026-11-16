@@ -327,3 +327,25 @@ Scale grid = {0.25, 0.5, 1, 2, 4} × mean spend. TV ranges from 0 to £376k, so 
 7. With three scenarios the weekly chart has four overlapping bands; the sidebar has a switch to hide them. Small multiples may read better.
 
 **Next:** dashboard team takes over the branch (or copies `app/` into their own); interface changes on request.
+
+## 2026-11-17 · Dashboard, second round · help panel, exact budget move, profit view, deployment prepared
+*(Jakob's request in the session; still on `dashboard_starter`, no PR opened.)*
+
+**Done:** `app/dashboard.py`: (1) a help panel at the top for managers (inputs, how to read low/likely/high and the range, red and yellow warnings, "outside the data is not a forecast"); (2) a "move x% from channel A to channel B" control on `shift_budget()`, with the codebook's 10% of TV to influencers as a button and as the second default scenario; (3) a Profit tab with a margin slider (default 20%, labelled as an assumption), profit after advertising per scenario, profit added and break-even margin per channel; (4) one line under the channel ROI table, shown only when the ROI of a channel with unchanged spend moves; (5) deployment prepared for Streamlit Community Cloud (`.streamlit/config.toml`, a path fallback in the app, steps in `app/README.md`). Charts reworked: a range chart for the gain (ring = study-sized, dot = as measured), a hover line in the weekly chart, a break-even chart with the assumed margin as a line; results in four tabs. Interface: `profit_view()`, `profit_gain()`, validation in `shift_budget()`, `delta_spend` in the `gain_range` table; INTERFACE.md updated. 36 tests pass. Checked in a browser, and in a fresh environment installed from `requirements.txt` only (as the cloud does).
+
+**Decisions:**
+- *Profit = margin × revenue − media spend, nothing else deducted.* Other costs are not in the data; the app says so. The bands carry over from revenue; the margin is treated as known. Break-even margin = 1 / ROI, as in step 6, so the dots in the break-even chart do not move with the slider, only the line does.
+- *The budget move is applied after the channel sliders* and moves a share of the source channel's (scaled) budget, pro rata over the weeks, as `shift_budget()` does. Week edits still win. A move that cannot be done (same channel, no spend in the target) shows a note and changes nothing.
+- *Default scenario 2 is now the exact codebook example* (was TV −10% / influencers +30%): budget unchanged to the pound, +3% to +47%, red warning (influencer 17% above any level ever held).
+- *Deployment without touching the pins:* the app adds `src/` to the path when the package is not installed, so the cloud needs only the root `requirements.txt`. Rejected: `-e .` inside requirements.txt (changes everyone's local install) and a second requirements file in `app/` (two sets of pins to keep in step).
+- *Help text says "plan with the lower figure, treat the higher one as the upside".* That is a recommendation, not a model output; change it if the team disagrees.
+
+**Results:** next 12 weeks at a 20% margin: profit after advertising £0.41m (£0.31m to £0.51m) for the current plan; break-even margins TV 85%, in-store promotion 27%, Instagram 5%, TikTok 5%, influencers 2%. At 20%, TV and in-store promotion do not pay for themselves in the plan weeks; the three digital channels do.
+
+**Open questions:**
+1. Deployment needs a person in the browser, and probably admin rights on Quentin's repository (steps and the fallback in `app/README.md`). Which branch should the public app follow: `dashboard_starter` now, `main` after the merge?
+2. Default margin 20% is the low end of the 20–40% assumed in the critical review. Replace it if the codebook or the professor gives a number.
+3. The in-store promotion result at 20% (just below break-even) will draw questions; it flips to "pays back" at about 27%. Worth a sentence on the slide.
+4. Still open from the first round: range or toggle, a simpler promotion control, an editable current plan, small multiples for three scenarios.
+
+**Next:** deploy (Jakob or Quentin), dashboard team review.

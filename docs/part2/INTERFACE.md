@@ -141,6 +141,19 @@ Our suggestion for the app: show the gain of a scenario as that range ("+4% to +
 
 `gain_range(model, plans, baseline)` does both calls and returns `(table, detail)`: per plan the revenue and units change in each mode (`delta_revenue_model`, `delta_revenue_benchmark`, `delta_revenue_pct_*`, `delta_units_pct_*`) and the two ends in order (`*_low`, `*_high`; sorted, because for a TV-heavy plan the benchmark is the larger one). `detail["model"]` and `detail["benchmark"]` are the two `compare_scenarios` results. The starter app in `app/` uses it.
 
+## Profit at an assumed margin
+
+Margin is not in the data, so profit is always "at the margin you assume" (a fraction of revenue):
+
+```python
+totals, channels = profit_view(fc, margin=0.20)
+profit_gain(gains, margin=0.20)          # gains = the table from gain_range()
+```
+
+`profit_view` returns `gross_profit_*` and `profit_after_media_*` for the plan (margin × revenue − media spend; other costs are not deducted) and, per channel, `incremental_profit_*`, `profit_per_pound_*`, `breakeven_margin` (= 1 / ROI, independent of the assumed margin) and `pays_back`. `profit_gain` turns the gain range into profit against the baseline (`delta_profit_model`, `_benchmark`, `_low`, `_high`). Next 12 weeks, current plan, 20% margin: £0.41m after media; break-even margins TV 85%, POS 27%, Instagram 5%, TikTok 5%, influencer 2%.
+
+`shift_budget` now refuses a move it cannot do (same channel twice, unknown channel, share outside 0–1, target with no spend in the plan) with a `ValueError`.
+
 ## How good are the forecasts?
 
 Back-test (`results/part2/step8_interface_check.md`): four 12-week forecasts in 2024, each from a model that had only seen the earlier weeks, given the spend, prices and promotions that actually followed.
@@ -168,7 +181,7 @@ python scripts/run_part2.py       # model comparison, about 5 minutes
 python scripts/run_insights.py    # ROI, decomposition, 2024 scenarios, figures
 python scripts/run_interface.py   # saves models/arla_mmm_final.json, back-test, magnitude check
 python scripts/run_review.py      # critical-review diagnostics, benchmark-anchored regression
-pytest                            # 33 tests; one fails if the saved model is out of date
+pytest                            # 36 tests; one fails if the saved model is out of date
 ```
 
 To refit on new data, `fit_model(new_data)` followed by `save_model(model)`; `fit_model` re-selects the carry-over rates and fits the same specification. The model file is plain JSON (coefficients, their covariance, residual spread, the observed ranges, and the benchmark-sized parameter set), so it can be read without our code.

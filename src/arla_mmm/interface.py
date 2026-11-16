@@ -194,7 +194,16 @@ def scale_plan(plan: pd.DataFrame, factors: dict[str, float]) -> pd.DataFrame:
 def shift_budget(plan: pd.DataFrame, source: str, target: str, share: float) -> pd.DataFrame:
     """Move `share` of the source channel's spend to the target channel (both pro rata over their
     weeks), total budget unchanged. shift_budget(plan, "tv", "influencer", 0.10) is the codebook's example."""
+    for ch in (source, target):
+        if ch not in CHANNELS:
+            raise ValueError(f"unknown channel {ch!r}; channels are {CHANNELS}")
+    if source == target:
+        raise ValueError("source and target must be different channels")
+    if not 0 <= share <= 1:
+        raise ValueError("share must be between 0 and 1 (0.10 = 10% of the source channel's spend)")
     out = plan.copy()
+    if out[target].sum() <= 0:
+        raise ValueError(f"{target} has no spend in this plan, so there are no weeks to add the budget to")
     moved = share * out[source].sum()
     out[target] = out[target] * (1 + moved / out[target].sum())
     out[source] = out[source] * (1 - share)
@@ -468,7 +477,7 @@ def gain_range(model: SavedModel, plans: dict[str, pd.DataFrame], baseline: str,
 
     Returns (table, detail). `table` has one row per plan: the revenue and units change against the
     baseline in each mode (`delta_revenue_model`, `delta_revenue_benchmark` in £; `delta_revenue_pct_*`,
-    `delta_units_pct_*` in %) and the two ends in order (`*_low`, `*_high`). The ends are sorted because
+    `delta_units_pct_*` in %; `delta_spend` is the change in media budget) and the two ends in order (`*_low`, `*_high`). The ends are sorted because
     the benchmark is not always the smaller one: it doubles TV's effect, so a TV-heavy plan gains more
     at benchmark size. `detail[mode]` is the full compare_scenarios() result of that mode, so nothing
     has to be forecast twice."""
@@ -476,12 +485,59 @@ def gain_range(model: SavedModel, plans: dict[str, pd.DataFrame], baseline: str,
     detail = {mode: compare_scenarios(model, plans, baseline, history, effects=mode, **kwargs)
               for mode in ("model", "benchmark")}
     out = pd.DataFrame(index=list(plans))
+    out["delta_spend"] = detail["model"][0]["delta_spend"]
     for col in ("delta_revenue", "delta_revenue_pct", "delta_units_pct"):
         src = "delta_revenue_mean" if col == "delta_revenue" else col
         both = pd.DataFrame({mode: detail[mode][0][src] for mode in detail})
         out[f"{col}_model"], out[f"{col}_benchmark"] = both["model"], both["benchmark"]
         out[f"{col}_low"], out[f"{col}_high"] = both.min(axis=1), both.max(axis=1)
     return out, detail
+
+
+def _check_margin(margin: float) -> float:
+    if not 0 < margin <= 1:
+        raise ValueError("margin is a fraction of revenue between 0 and 1 (0.20 = 20%)")
+    return float(margin)
+
+
+def profit_view(fc: Forecast, margin: float) -> tuple[pd.Series, pd.DataFrame]:
+    """A forecast in profit terms at an ASSUMED gross margin (fraction of revenue; margin is not in the data).
+
+    Returns (totals, channels).
+    totals    `gross_profit_*` = margin x revenue and `profit_after_media_*` = that minus the media spend
+              (mean, p5, p50, p95; other costs are not known and not deducted).
+    channels  one row per channel: `incremental_profit_*` = margin x the revenue the channel adds minus its
+              spend above the reference level; `profit_per_pound_*` = the same per £ (margin x ROI - 1);
+              `breakeven_margin` = the margin at which the channel pays for itself = 1 / ROI (does not
+              depend on the assumed margin); `pays_back` = the assumed margin is above it.
+    The bands carry over from the revenue bands; the margin itself is treated as known."""
+    margin = _check_margin(margin)
+    stats = ["mean", *QUANTILES]
+    totals = {"margin": margin, "media_spend": fc.totals["media_spend"]}
+    for q in stats:
+        totals[f"gross_profit_{q}"] = margin * fc.totals[f"revenue_{q}"]
+        totals[f"profit_after_media_{q}"] = margin * fc.totals[f"revenue_{q}"] - fc.totals["media_spend"]
+    ch = fc.channels
+    out = ch[["spend", "spend_above_reference"]].copy()
+    for q in stats:
+        out[f"incremental_profit_{q}"] = margin * ch[f"incremental_revenue_{q}"] - ch["spend_above_reference"]
+        out[f"profit_per_pound_{q}"] = margin * ch[f"roi_{q}"] - 1
+    out["breakeven_margin"] = 1 / ch["roi_mean"]
+    out["pays_back"] = margin > out["breakeven_margin"]
+    return pd.Series(totals), out
+
+
+def profit_gain(gains: pd.DataFrame, margin: float) -> pd.DataFrame:
+    """The gain_range() table in profit terms at an assumed gross margin: per plan the change in profit
+    after media against the baseline = margin x change in revenue - change in media budget, for both
+    effect sizes (`delta_profit_model`, `delta_profit_benchmark`) and as sorted ends (`_low`, `_high`)."""
+    margin = _check_margin(margin)
+    out = pd.DataFrame(index=gains.index)
+    for mode in ("model", "benchmark"):
+        out[f"delta_profit_{mode}"] = margin * gains[f"delta_revenue_{mode}"] - gains["delta_spend"]
+    out["delta_profit_low"] = out[["delta_profit_model", "delta_profit_benchmark"]].min(axis=1)
+    out["delta_profit_high"] = out[["delta_profit_model", "delta_profit_benchmark"]].max(axis=1)
+    return out
 
 
 def backtest(data: pd.DataFrame | None = None, horizon: int = 12, origins: tuple[int, ...] = (104, 117, 130, 143)) -> pd.DataFrame:
