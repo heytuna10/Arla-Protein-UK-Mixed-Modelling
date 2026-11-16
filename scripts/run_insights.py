@@ -34,6 +34,12 @@ def main() -> None:
     promo_hist = ins.promotions_history(m)
     promo_curve = ins.promotion_curve(m)
     price = ins.price_elasticity(m)
+    steps = ins.price_steps(m)
+    steps_md = pd.DataFrame({
+        "new shelf price £": steps["new shelf price £"], "price change %": steps["price change %"],
+        "units per week (5–95%)": [f"{r['units per week']:,.0f} ({r['units p5']:,.0f} to {r['units p95']:,.0f})" for _, r in steps.iterrows()],
+        "revenue per week £ (5–95%)": [f"{r['revenue per week £']:+,.0f} ({r['revenue p5']:+,.0f} to {r['revenue p95']:+,.0f})" for _, r in steps.iterrows()],
+    }, index=steps.index)
     curves = ins.response_curves(m)
     weekly.round(0).to_csv(RESULTS_DIR / "decomposition_weekly.csv", index=False)
     curves.round(1).to_csv(RESULTS_DIR / "response_curves.csv", index=False)
@@ -124,6 +130,12 @@ def main() -> None:
         "",
         "Demand is inelastic: a higher shelf price loses fewer units than it gains in price. Caveat: identified from four upward "
         "price steps that coincide with the growth trend (VIF 11), so the interval is wide and includes no revenue gain at all.",
+        "",
+        f"In pence, for a manager (the per-1p / per-10p / per-1% view comes from Ketan's part-1 notebook). Per week, from the current shelf "
+        f"price of £{steps.attrs['price']:.2f} and the 2024 average week ({steps.attrs['units'] / 1e3:,.0f}k units, £{steps.attrs['revenue'] / 1e3:,.0f}k revenue), "
+        "once repeat purchase has settled:",
+        "",
+        md_table(steps_md.rename_axis("shelf price"), nd={"new shelf price £": 2, "price change %": 1}),
         "",
         "## 6. Response curves",
         "",

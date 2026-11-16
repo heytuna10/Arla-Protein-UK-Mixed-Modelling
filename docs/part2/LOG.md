@@ -225,3 +225,35 @@ Scale grid = {0.25, 0.5, 1, 2, 4} × mean spend. TV ranges from 0 to £376k, so 
 4. `CLAUDE.md` and `docs/part2/BRIEF.md` are part of the PR to `main`. Say if you would rather keep them off `main`.
 
 **Next:** Open the PR and get the team's review; agree the interface with the dashboard team and adjust it to what the app needs; slides from SUMMARY.md.
+
+## 2026-11-16 · Step 9 · critical review, diagnostics, and the part-1 credits
+**Done:** BRIEF decisions after step 8 committed. *Credit part 1:* `insights.price_steps` and a pence table in `step6_contributions_roi.md` §5; SUMMARY bullet 7 in pence (crediting Ketan) and a new "analytical steps" block with the line on revenue as a regressor. *Step 9:* `src/arla_mmm/review.py`, `scripts/run_review.py` (10 seconds), `results/part2/step9_diagnostics.md` (tables), `results/part2/step9_critical_review.md` (the review), `tests/test_review.py` (28 tests pass). Also the "flag appears as the horizon grows" note in INTERFACE.md and a README pointer. Shrinkage is proposed, not built.
+
+**Decisions:**
+- *Added a test the brief did not list: slow against fast movements of spend.* Each always-on regressor split into its 13-week level and the weekly deviation. Why: it is the direct test of "budgets are planned where demand is expected", which the weekly placebo cannot see. Also added the placebo at 4 and 8 weeks.
+- *Benchmark-sized scenario = scale each above-benchmark channel to a long-term elasticity of 0.24, leave TV and POS as estimated.* Used for the profit view and the test design. This is arithmetic on the fitted model, not a re-estimation; the re-estimated version is option A of the shrinkage proposal.
+- *Margin range 20–40% of revenue.* Source: Damodaran's January 2026 sector data, US food processing gross margin about 23% (seen through a third-party reproduction; his own page confirms the operating margin). I found no source for the retailer's share of the shelf price, so I say the lower end is the realistic one and leave it as an assumption to replace.
+- *Test design = 13 weeks of the first-step plan read against the dashboard forecast of the unchanged plan, then 8 weeks back on the old plan.* No regions exist; alternating short blocks would blur with four weeks of carry-over. Rejected: one channel at a time as the main design (a benchmark-sized effect of one channel, +2.4%, is not detectable).
+- *Minimum detectable effect quoted as a range, 3–6% for 13 weeks.* 3% from forecast errors with full-sample coefficients, 6% from five out-of-sample forecasts. Five forecasts are few, so I give both.
+
+**Results:** [step9_critical_review.md](../../results/part2/step9_critical_review.md) · [step9_diagnostics.md](../../results/part2/step9_diagnostics.md)
+- *No sign that spend follows demand.* Digital spend does not respond to last week's sales (p 0.41–0.86) and does not rise in promotion weeks. Future spend explains nothing for the always-on channels at 1, 4 or 8 weeks. Slow and fast movements give the same coefficient (influencer 4.32 and 4.33); 74–97% of the variation is week-to-week.
+- *No shared digital effect.* The three digital budgets are uncorrelated (largest r 0.12). One "digital" channel instead of three: AIC −338 against −497, hold-out error 10.9% against 4.2%.
+- *Two new caveats.* POS spend is about 30% higher in promotion weeks (p < 0.001), so POS and price promotions are harder to separate than the rest. TV shows a small negative signal in the 8-week placebo (p 0.005; joint test not significant).
+- *Sizes.* The five long-term elasticities sum to 3.36 (benchmark 0.24 for a brand's advertising). Media spend is 18% of revenue. My reading: the effects are a property of the data (spend close to random, sales respond strongly), most likely a teaching dataset; within-week reverse causality is the one real-world explanation left and cannot be tested here.
+- *The recommendation survives at benchmark size.* Revenue per extra £ would be about 9–11 for each digital channel against 5.5 for POS and 1.7 for TV, because digital budgets are small relative to revenue. Profit per extra £ at a 20% margin: TV −0.66, POS +0.09, digital +0.8 to +1.2 at benchmark size (+4 to +14 as estimated). What does not survive: the order among the three digital channels, and the gain (first-step plan about +6% of sales, not +28%).
+- *Test.* 13 weeks detect a change of 3–6% in sales, so they separate "model" (+28%) from "benchmark" (+6%) clearly and are just enough for a benchmark-sized effect. Cost if wrong: about 1.2% of sales from the TV cut.
+- *Price in pence:* +5p on £1.61 → about −16,100 units a week (−24,300 to −7,900) and +£7,100 revenue a week (−£4,600 to +£18,800).
+
+**For the slides:**
+- "We tested whether budgets follow demand and whether the three digital channels share one effect. Neither is the case. The effects are in the data, and they are larger than any real market we know of."
+- "Even if social and influencer advertising worked only as well as the literature average, the next £ would still earn five times what the next £ of TV earns. That is why the direction is safe and only the size needs a test."
+
+**Open questions:**
+1. **Shrinkage: build option A?** Benchmark-anchored regression in closed form (normal priors on the five media coefficients, strength swept from none to dogmatic; table and one figure), 2–3 hours, no new dependency. Expected: ranking digital > POS > TV survives the sweep, forecast error rises sharply near the benchmark. A full Bayesian model (PyMC-Marketing) would take 1–1.5 days and should give the same answer; I advise against it for 22 Nov.
+2. **Conservative mode in the dashboard interface?** A switch that scales digital effects to benchmark size so every scenario shows a range. About 2 hours after option A; needs the dashboard team's agreement.
+3. **Rewrite SUMMARY.md around the review?** I only added the part-1 credits and a pointer. The review proposes new wording for five slides (gain as a range of +6% to +28%, profit row, "how we tried to break it", test with decision rule). Say if I should apply it.
+4. The margin range is my assumption; does the course or the codebook give one?
+5. The pull request is still to be opened by Jakob (decided in §7).
+
+**Next:** Decisions on 1–3; then option A and the SUMMARY rewrite if agreed.

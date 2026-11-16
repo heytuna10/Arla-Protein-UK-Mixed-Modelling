@@ -119,7 +119,7 @@ The model is trustworthy inside the spend levels it has seen and not outside the
 
 So a plan that sets influencer spend to £30k in every week passes the weekly check and is still 35% above anything the brand has ever sustained. In that region the model answers with very large revenue gains that nobody should present as a forecast.
 
-`fc.warnings` gives the flags as ready sentences, sustained-level warnings first, for example: *"influencer: the 13-week average spend is up to 17% above the highest level ever held in the data (8 of 12 weeks). The model has no evidence here; read the result as extrapolation."* An empty list means the plan is inside the data. Our suggestion: a red banner when any `sustained_out` is true, a quieter note for `weekly_out`, and grey out or caveat the revenue numbers of a flagged scenario.
+`fc.warnings` gives the flags as ready sentences, sustained-level warnings first, for example: *"influencer: the 13-week average spend is up to 17% above the highest level ever held in the data (8 of 12 weeks). The model has no evidence here; read the result as extrapolation."* An empty list means the plan is inside the data. Note that a plan can become flagged as the horizon grows: in the first weeks the 13-week average still contains history, so a sustained increase of 10% may pass for 12 weeks and be flagged over a year. Our suggestion: a red banner when any `sustained_out` is true, a quieter note for `weekly_out`, and grey out or caveat the revenue numbers of a flagged scenario.
 
 ## How good are the forecasts?
 
@@ -147,7 +147,7 @@ Example output for the next 12 weeks: same file, and `results/part2/figures/fore
 python scripts/run_part2.py       # model comparison, about 5 minutes
 python scripts/run_insights.py    # ROI, decomposition, 2024 scenarios, figures
 python scripts/run_interface.py   # saves models/arla_mmm_final.json, back-test, magnitude check
-pytest                            # 25 tests; one fails if the saved model is out of date
+pytest                            # 28 tests; one fails if the saved model is out of date
 ```
 
 To refit on new data, `fit_model(new_data)` followed by `save_model(model)`; `fit_model` re-selects the carry-over rates and fits the same specification. The model file is plain JSON (coefficients, their covariance, residual spread, the observed ranges), so it can be read without our code.

@@ -16,13 +16,18 @@ What the extended marketing mix model says, in the order a deck would tell it. E
 
 6. **Effects last weeks, not months.** TV and influencer effects arrive 39% in the week of spend and 93% within four weeks; TikTok and POS work almost entirely in the week they run. On top, 36% of any week's uplift comes back the next week as repeat purchase. No extra synergy between channels was found beyond the general effect that everything works better when sales are high. [`step3_media.md`, `step4_synergies.md`]
 
-7. **Demand is not very price-sensitive, but this is the weakest number.** A 1% higher shelf price costs about 0.8% of units in total, so a 5% increase would add about 1% revenue (range −0.8% to +3.1%). The shelf price only ever rose, four times, so the range is wide. [`step6_contributions_roi.md` §5]
+7. **Demand is not very price-sensitive, but this is the weakest number.** A 1% higher shelf price costs about 0.8% of units in total, so a 5% increase would add about 1% revenue (range −0.8% to +3.1%). In pence: 5p more on today's £1.61 would cost about 16,000 units a week (8,000 to 24,000) and add about £7,000 of weekly revenue (range −£5,000 to +£19,000). The shelf price only ever rose, four times, so the range is wide. Expressing price effects per penny is Ketan's idea from part 1. [`step6_contributions_roi.md` §5]
 
 8. **Recommendation: move budget from TV to influencers, Instagram and TikTok, as a measured first step.** TV −10% within its flights, the three social channels +10% each, POS and the total budget unchanged. This is about as far as the brand has ever held spend away from today's levels (the highest quarter of influencer spend on record is 11% above its average), so it is the largest step the data can support. [`step7_scenarios.md`, figure `allocation_main.png`]
 
 9. **Quote the gain once, as an upper bound.** Replaying 2024 with the first-step plan, the model implies up to +£15m revenue (+30%); the codebook's "10% of TV to influencer" implies up to +£25m. These follow from the steep influencer and social slopes and are not forecasts. The conclusion is the direction, the ranking and the test, not the number. [`step7_scenarios.md`, figure `scenarios_main.png`]
 
 10. **Run it as a test, then scale.** Raise influencer and social spend for a quarter, or in some regions, and compare with the model's prediction. Also test fewer or shallower price promotions. Scale further only on that evidence.
+
+## For the "analytical steps" slide
+
+- **Why revenue is never an explanatory variable.** Revenue is units × price, so it is the target in disguise: part 1 showed that a model with revenue on the right-hand side reaches R² = 1.000 and explains nothing (noted in Ketan's and Quentin's notebooks). We model units and derive revenue from units and price.
+- **One change at a time.** Every extension was tested against the previous model on information criteria, forecast error on unseen weeks, residual checks and plausibility, and kept only if it passed all four.
 
 ## Magnitude check: do we believe the effect sizes?
 
@@ -86,6 +91,7 @@ Appendix:
 | Scenarios and recommendation | `step7_scenarios.md` |
 | Effect sizes against the literature | `step8_magnitude_check.md` |
 | Forecast accuracy of the dashboard interface | `step8_interface_check.md` |
+| What can we claim, what not, what would improve it? Profit view, test design | `step9_critical_review.md`, `step9_diagnostics.md` |
 | How to call the model from the dashboard | `docs/part2/INTERFACE.md` |
 | Every decision with its reason | `docs/part2/LOG.md` |
 | The story with charts, runnable | `notebooks/02_model_extension.ipynb` |

@@ -235,3 +235,23 @@ def curve_shape(m: FinalModel) -> pd.DataFrame:
             "bends upwards over": where,
         }
     return pd.DataFrame.from_dict(rows, orient="index")
+
+
+def price_steps(m: FinalModel, steps=(0.01, 0.05, 0.10)) -> pd.DataFrame:
+    """The shelf-price effect in pence, for managers (the idea of expressing price effects per 1p / 10p / 1%
+    comes from Ketan's part-1 notebook). Per week, at the 2024 average week and the current shelf price,
+    once repeat purchase has settled; 5-95% range from the coefficient draws."""
+    d = m.data
+    last = d[d["week_beg"].dt.year == d["week_beg"].dt.year.max()]
+    units, rev = float(last["sales_units"].mean()), float(last["revenue"].mean())
+    p0 = float(regular_price(d).iloc[-1])
+    total = m.coef("regular_price") / (1 - m.coef("lagged_sales"))
+    rows = {}
+    for label, ratio in [(f"+{int(round(s * 100))}p", (p0 + s) / p0) for s in steps] + [("+1%", 1.01)]:
+        du, dr = _q(units * (ratio ** total - 1)), _q(rev * (ratio ** (1 + total) - 1))
+        rows[label] = {"new shelf price £": p0 * ratio, "price change %": (ratio - 1) * 100,
+                       "units per week": du["estimate"], "units p5": du["p5"], "units p95": du["p95"],
+                       "revenue per week £": dr["estimate"], "revenue p5": dr["p5"], "revenue p95": dr["p95"]}
+    out = pd.DataFrame(rows).T
+    out.attrs.update(units=units, revenue=rev, price=p0)
+    return out

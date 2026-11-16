@@ -79,6 +79,15 @@ The uplift is far below what a discount needs to pay for itself in revenue (last
 
 Demand is inelastic: a higher shelf price loses fewer units than it gains in price. Caveat: identified from four upward price steps that coincide with the growth trend (VIF 11), so the interval is wide and includes no revenue gain at all.
 
+In pence, for a manager (the per-1p / per-10p / per-1% view comes from Ketan's part-1 notebook). Per week, from the current shelf price of £1.61 and the 2024 average week (700k units, £972k revenue), once repeat purchase has settled:
+
+| shelf price | new shelf price £ | price change % | units per week (5–95%) | revenue per week £ (5–95%) |
+|---|---|---|---|---|
+| +1p | 1.62 | 0.6 | -3,298 (-4,986 to -1,615) | +1,432 (-925 to +3,782) |
+| +5p | 1.66 | 3.1 | -16,141 (-24,284 to -7,942) | +7,092 (-4,559 to +18,823) |
+| +10p | 1.71 | 6.2 | -31,447 (-47,042 to -15,563) | +14,023 (-8,962 to +37,435) |
+| +1% | 1.63 | 1.0 | -5,293 (-7,995 to -2,594) | +2,302 (-1,486 to +6,084) |
+
 ## 6. Response curves
 
 `figures/response_curves.png`, data in `response_curves.csv`: weekly revenue against a constant weekly spend per channel, with the range the model has evidence for. Carry-over profile per channel: `step3_media.md`.
