@@ -1,6 +1,6 @@
 """Model interface for the scenario dashboard (part 3). Documentation: docs/part2/INTERFACE.md.
 
-    from arla_mmm.interface import load_model, baseline_plan, scale_plan, forecast, compare_scenarios
+    from arla_mmm.interface import load_model, baseline_plan, scale_plan, forecast, compare_scenarios, gain_range
 
     model = load_model()                                  # the fitted final model (models/arla_mmm_final.json)
     base = baseline_plan(model, weeks=12)                 # next 12 weeks, same weeks as a year earlier
@@ -409,9 +409,16 @@ def forecast(model: SavedModel, plan: pd.DataFrame, history: pd.DataFrame | None
                        **{k: float(v) for k, v in _summary(parts[ch].sum(axis=1), "incremental_units").items()},
                        **{k: float(v) for k, v in _summary(inc_rev, "incremental_revenue").items()},
                        **{k: float(v) for k, v in _summary(roi, "roi").items()}}
+    # return on media of the whole plan: revenue all channels add together per £ above their reference levels
+    above_all = float(sum(r["spend_above_reference"] for r in ch_rows.values()))
+    inc_all = sum((parts[ch] * price).sum(axis=1) for ch in CHANNELS)
+    media_roi = inc_all / above_all if above_all > 1e-9 else np.full(n_draws, np.nan)
     totals = pd.Series({"weeks": n, "media_spend": float(p[CHANNELS].sum().sum()),
                         **{k: float(v) for k, v in _summary(units.sum(axis=1), "units").items()},
-                        **{k: float(v) for k, v in _summary(revenue.sum(axis=1), "revenue").items()}})
+                        **{k: float(v) for k, v in _summary(revenue.sum(axis=1), "revenue").items()},
+                        "media_spend_above_reference": above_all,
+                        **{k: float(v) for k, v in _summary(inc_all, "media_incremental_revenue").items()},
+                        **{k: float(v) for k, v in _summary(media_roi, "media_roi").items()}})
     flags = check_range(model, plan, history, tolerance)
     return Forecast(weekly=weekly, contributions=contributions, channels=pd.DataFrame(ch_rows).T, totals=totals,
                     flags=flags, warnings=range_warnings(flags), plan=p, units_draws=units, revenue_draws=revenue)
@@ -445,12 +452,36 @@ def compare_scenarios(model: SavedModel, plans: dict[str, pd.DataFrame], baselin
             "delta_revenue_pct": float((rev - rev0).mean() / rev0.mean() * 100),
             "delta_units_pct": float((units - units0).mean() / units0.mean() * 100),
             "revenue_per_media_pound": float(rev.mean() / fc.totals["media_spend"]),
+            **{k: fc.totals[k] for k in ("media_roi_mean", "media_roi_p5", "media_roi_p50", "media_roi_p95")},
             "roi_vs_baseline": float((rev - rev0).mean() / d_spend) if abs(d_spend) > 0.01 * spend0 else np.nan,
             "weeks_weekly_out": int(fl.loc[fl["weekly_out"], "week_beg"].nunique()),
             "weeks_sustained_out": int(fl.loc[fl["sustained_out"], "week_beg"].nunique()),
             "inputs_out_of_range": ", ".join(fl.loc[fl["sustained_out"] | fl["weekly_out"], "input"].unique()),
         }
     return pd.DataFrame.from_dict(rows, orient="index"), fcs
+
+
+def gain_range(model: SavedModel, plans: dict[str, pd.DataFrame], baseline: str,
+               history: pd.DataFrame | None = None, **kwargs) -> tuple[pd.DataFrame, dict[str, tuple[pd.DataFrame, dict[str, Forecast]]]]:
+    """Each plan's gain over the baseline as a range between the two effect sizes we can defend:
+    effects="benchmark" (advertising effects of literature size) and effects="model" (as estimated).
+
+    Returns (table, detail). `table` has one row per plan: the revenue and units change against the
+    baseline in each mode (`delta_revenue_model`, `delta_revenue_benchmark` in £; `delta_revenue_pct_*`,
+    `delta_units_pct_*` in %) and the two ends in order (`*_low`, `*_high`). The ends are sorted because
+    the benchmark is not always the smaller one: it doubles TV's effect, so a TV-heavy plan gains more
+    at benchmark size. `detail[mode]` is the full compare_scenarios() result of that mode, so nothing
+    has to be forecast twice."""
+    kwargs.pop("effects", None)
+    detail = {mode: compare_scenarios(model, plans, baseline, history, effects=mode, **kwargs)
+              for mode in ("model", "benchmark")}
+    out = pd.DataFrame(index=list(plans))
+    for col in ("delta_revenue", "delta_revenue_pct", "delta_units_pct"):
+        src = "delta_revenue_mean" if col == "delta_revenue" else col
+        both = pd.DataFrame({mode: detail[mode][0][src] for mode in detail})
+        out[f"{col}_model"], out[f"{col}_benchmark"] = both["model"], both["benchmark"]
+        out[f"{col}_low"], out[f"{col}_high"] = both.min(axis=1), both.max(axis=1)
+    return out, detail
 
 
 def backtest(data: pd.DataFrame | None = None, horizon: int = 12, origins: tuple[int, ...] = (104, 117, 130, 143)) -> pd.DataFrame:

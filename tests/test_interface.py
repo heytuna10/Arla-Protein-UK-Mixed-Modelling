@@ -7,7 +7,7 @@ from arla_mmm.engine import simulate
 from arla_mmm.features import promo_depth, regular_price
 from arla_mmm.final import final_model
 from arla_mmm.interface import (MODEL_PATH, baseline_plan, check_range, compare_scenarios, fit_model, forecast,
-                                load_model, save_model, scale_plan, shift_budget)
+                                gain_range, load_model, save_model, scale_plan, shift_budget)
 
 
 @pytest.fixture(scope="module")
@@ -118,3 +118,31 @@ def test_benchmark_mode(model, base):
     assert load_model(MODEL_PATH).benchmark is not None
     with pytest.raises(ValueError, match="effects"):
         forecast(model, base, effects="other")
+
+
+def test_media_roi_of_a_plan(model, base):
+    fc = forecast(model, base)
+    t, ch = fc.totals, fc.channels
+    assert t["media_spend_above_reference"] == pytest.approx(ch["spend_above_reference"].sum())
+    assert t["media_incremental_revenue_mean"] == pytest.approx(ch["incremental_revenue_mean"].sum())
+    assert t["media_roi_mean"] == pytest.approx(ch["incremental_revenue_mean"].sum() / ch["spend_above_reference"].sum())
+    assert t["media_roi_p5"] < t["media_roi_p50"] < t["media_roi_p95"]
+    assert ch["roi_mean"].min() < t["media_roi_mean"] < ch["roi_mean"].max()      # a spend-weighted mix of the channels
+    table, _ = compare_scenarios(model, {"current": base}, baseline="current")
+    assert table.loc["current", "media_roi_p50"] == pytest.approx(t["media_roi_p50"])
+
+
+def test_gain_range(model, base):
+    plans = {"current": base, "shift": scale_plan(base, {"tv": 0.9, "instagram": 1.1, "tiktok": 1.1, "influencer": 1.1}),
+             "more tv": scale_plan(base, {"tv": 1.2})}
+    rng, detail = gain_range(model, plans, baseline="current")
+    est, lit = detail["model"][0], detail["benchmark"][0]
+    assert list(rng.index) == list(plans) and set(detail["model"][1]) == set(plans)
+    assert (rng.loc["current"].to_numpy() == 0).all()
+    assert rng.loc["shift", "delta_revenue_pct_low"] == pytest.approx(lit.loc["shift", "delta_revenue_pct"])
+    assert rng.loc["shift", "delta_revenue_pct_high"] == pytest.approx(est.loc["shift", "delta_revenue_pct"])
+    assert rng.loc["shift", "delta_revenue_model"] == pytest.approx(est.loc["shift", "delta_revenue_mean"])
+    # the benchmark doubles TV's effect, so for a TV increase it is the upper end: the ends must be sorted
+    assert lit.loc["more tv", "delta_revenue_pct"] > est.loc["more tv", "delta_revenue_pct"]
+    assert rng.loc["more tv", "delta_revenue_pct_high"] == pytest.approx(lit.loc["more tv", "delta_revenue_pct"])
+    assert (rng["delta_revenue_low"] <= rng["delta_revenue_high"]).all()
