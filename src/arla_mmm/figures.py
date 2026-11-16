@@ -9,7 +9,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.ticker import FuncFormatter
+from matplotlib.ticker import FuncFormatter, MultipleLocator
 
 from .data import CHANNELS, RESULTS_DIR
 
@@ -190,23 +190,29 @@ def fit_holdout(weeks, actual, fitted, forecast, origin: int) -> Path:
     return _save(fig, "fit_holdout.png")
 
 
-def scenarios(table: pd.DataFrame, keys: list[str]) -> Path:
+SCENARIO_SUB = ("Replay of 2024 with a different media plan. Black line: 5–95% range from coefficient uncertainty only.\n"
+                "These are what the model implies, not a forecast: the larger the change, the further it is from anything observed.")
+
+
+def scenarios(table: pd.DataFrame, keys: list[str], name: str = "scenarios.png",
+              title: str = "Model-implied revenue change vs the 2024 plan", subtitle: str = SCENARIO_SUB) -> Path:
     t = table.loc[keys]
     fig, ax = plt.subplots(figsize=(11.5, 0.9 * len(keys) + 2.2))
     y = np.arange(len(t))[::-1]
     ax.barh(y, t["Δ revenue £m"], height=0.3, color=COLOR["tv"])
     ax.hlines(y, t["Δ p5"], t["Δ p95"], color=INK, linewidth=1.5)
     for yi, (_, r) in zip(y, t.iterrows()):
-        ax.text(max(r["Δ p95"], 0) + 0.6, yi, f"+£{r['Δ revenue £m']:.0f}m  ({r['Δ revenue %']:+.0f}%)", va="center", fontsize=12)
+        label = f"+£{r['Δ revenue £m']:.0f}m  ({r['Δ revenue %']:+.0f}%)" if abs(r["Δ revenue £m"]) > 1e-9 else "reference"
+        ax.text(max(r["Δ p95"], 0) + 0.6, yi, label, va="center", fontsize=12)
     ax.set_yticks(y, [k.split(" · ")[1] if " · " in k else k for k in t.index])
     ax.set_xlim(0, t["Δ p95"].max() * 1.3)
     ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"£{v:.0f}m"))
     ax.grid(axis="y", visible=False)
-    _title(ax, "Model-implied revenue change vs the 2024 plan", "Replay of 2024 with a different media plan. Black line: 5–95% range from coefficient uncertainty only.\nThese are what the model implies, not a forecast: the larger the change, the further it is from anything observed.")
-    return _save(fig, "scenarios.png")
+    _title(ax, title, subtitle)
+    return _save(fig, name)
 
 
-def allocation(plans: dict[str, pd.Series], title_sub: str) -> Path:
+def allocation(plans: dict[str, pd.Series], title_sub: str, name: str = "allocation.png", legend_below: bool = False) -> Path:
     """Annual spend per channel for up to three ordered plans (ordinal blue ramp, legend + value labels)."""
     names = list(plans)
     fig, ax = plt.subplots(figsize=(11.5, 5.6))
@@ -222,9 +228,12 @@ def allocation(plans: dict[str, pd.Series], title_sub: str) -> Path:
     ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"£{v:.1f}m"))
     ax.set_xlim(0, max(p[CHANNELS].max() for p in plans.values()) / 1e6 * 1.15)
     ax.grid(axis="y", visible=False)
-    ax.legend(loc="lower right", fontsize=11)
+    if legend_below:
+        ax.legend(loc="upper left", bbox_to_anchor=(0, -0.08), ncol=len(names), fontsize=11, columnspacing=1.6)
+    else:
+        ax.legend(loc="lower right", fontsize=11)
     _title(ax, "Same budget, shifted from TV towards social and influencers", title_sub)
-    return _save(fig, "allocation.png")
+    return _save(fig, name)
 
 
 def promotions(curve: pd.DataFrame) -> Path:
@@ -245,3 +254,27 @@ def promotions(curve: pd.DataFrame) -> Path:
     ax.legend(loc="upper left", ncols=2, fontsize=11)
     _title(ax, "Price promotions sell more units but cost revenue", "Effect of one promotion week, incl. the weeks after, in % of a normal week. Line: 5–95% range.")
     return _save(fig, "promotions.png")
+
+
+def forecast_fan(history: pd.DataFrame, forecasts: dict[str, pd.DataFrame], weeks_back: int = 26) -> Path:
+    """Interface example: the last weeks of history and the forecast (median, 5-95% band) for up to three plans."""
+    fig, ax = plt.subplots(figsize=(11.5, 5.4))
+    h = history.tail(weeks_back)
+    ax.plot(h["week_beg"], h["revenue"], color=INK, linewidth=2, label="Observed")
+    last = h.iloc[-1]
+    colours = [MUTED, COLOR["tv"], COLOR["influencer"]]
+    for (name, w), c in zip(forecasts.items(), colours):
+        x = np.r_[last["week_beg"].to_datetime64(), w["week_beg"].to_numpy()]
+        ax.fill_between(x, np.r_[last["revenue"], w["revenue_p5"]], np.r_[last["revenue"], w["revenue_p95"]],
+                        color=c, alpha=0.16, linewidth=0)
+        ax.plot(x, np.r_[last["revenue"], w["revenue_p50"]], color=c, linewidth=2, label=name)
+    ax.axvline(last["week_beg"], color=GRID, linewidth=1.5)
+    ax.yaxis.set_major_locator(MultipleLocator(0.5e6))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"£{v / 1e6:.1f}m"))
+    ax.set_ylim(0, None)
+    ax.grid(axis="x", visible=False)
+    ax.legend(loc="lower left", fontsize=11, title="Forecasts: median and 5–95% band", title_fontsize=10.5, alignment="left")
+    _title(ax, "What the dashboard gets back: weekly revenue with an uncertainty band per plan",
+           "Next 12 weeks after the data end. Bands cover coefficient and week-to-week uncertainty, "
+           "not the risk of leaving the observed spend range.")
+    return _save(fig, "forecast_example.png")

@@ -168,3 +168,70 @@ def response_curves(m: FinalModel, points: int = 60) -> pd.DataFrame:
             "observed_min": lo, "observed_max": hi, "mean_spend": mean, "reference": ref[ch],
         }))
     return pd.concat(out, ignore_index=True)
+
+
+# ------------------------------------------------------------------ step 8: magnitude check
+
+# Sethuraman, Tellis & Briesch (2011), "How well does advertising work? Generalizations from
+# meta-analysis of brand advertising elasticities", Journal of Marketing Research 48(3): mean
+# advertising elasticity over 751 short-term and 402 long-term estimates.
+BENCHMARK = {"short": 0.12, "long": 0.24}
+
+
+def elasticities(m: FinalModel, bump: float = 0.01) -> pd.DataFrame:
+    """Advertising elasticity per channel implied by the final model, next to the meta-analytic benchmark.
+
+    long-term : % change in total units when the channel's spend is 1% higher in every week of the
+                history (same shocks; adstock and repeat purchase included).
+    short-term: the part of it that arrives in the week of the spend = long-term x (1 - decay) x
+                (1 - lagged-sales coefficient).
+    at typical spend: the formula value beta x curve elasticity / (1 - lagged sales) at the channel's
+                average weekly spend (TV: average on-air week), i.e. if that level were held."""
+    d = m.data.iloc[m.rows]
+    total = d["sales_units"].sum()
+    lam = m.coef("lagged_sales")
+    rows = {}
+    for ch in CHANNELS:
+        up = m.data.copy()
+        up[ch] = up[ch] * (1 + bump)
+        long = (m.paths(up).sum(axis=1) / total - 1) / bump
+        short = long * (1 - m.config.decay.get(ch, 0.0)) * (1 - lam)
+        x = float(m.data.loc[m.data[ch] > 0, ch].mean())
+        r = x / m.config.scale[ch]
+        typical = m.coef(ch) * r / (1 + r) ** 2 / (1 - lam)          # Hill: d f / d ln x = r / (1 + r)^2
+        ql, qs = _q(long), _q(short)
+        rows[LABEL[ch]] = {
+            "short-term": qs["estimate"], "short p5": qs["p5"], "short p95": qs["p95"],
+            "long-term": ql["estimate"], "long p5": ql["p5"], "long p95": ql["p95"],
+            "long-term at typical spend": _q(typical)["estimate"],
+            "short-term vs benchmark ×": qs["estimate"] / BENCHMARK["short"],
+            "long-term vs benchmark ×": ql["estimate"] / BENCHMARK["long"],
+        }
+    return pd.DataFrame(rows).T
+
+
+def curve_shape(m: FinalModel) -> pd.DataFrame:
+    """Where each channel's revenue curve bends upwards, and why.
+
+    Held at a level x, a channel multiplies sales by exp(B * f(x)) with f(x) = x / (x + scale) and
+    B = coefficient / (1 - lagged sales). f flattens (diminishing returns in %), but a constant % lift
+    is worth more £ the larger the sales it applies to. The £ curve bends upwards wherever
+    B * f'(x)^2 + f''(x) > 0, i.e. for x below scale * (B / 2 - 1); above that it flattens."""
+    if m.config.shape != "hill":
+        raise ValueError("curve_shape is written for the Hill curve")
+    lam = float(m.coef("lagged_sales")[0])
+    roll = m.data[CHANNELS].rolling(13).mean()
+    rows = {}
+    for ch in CHANNELS:
+        B = float(m.coef(ch)[0]) / (1 - lam)
+        scale = m.config.scale[ch]
+        turn = max(scale * (B / 2 - 1), 0.0)
+        lo, hi = float(roll[ch].min()), float(roll[ch].max())
+        where = "the whole held range" if turn >= hi else ("nowhere in the held range" if turn <= lo else "the lower part of the held range")
+        rows[LABEL[ch]] = {
+            "long-run coefficient B": B, "max. sales multiple exp(B)": float(np.exp(B)),
+            "curve bends upwards below £/week": turn,
+            "lowest 13-week average observed £": lo, "highest 13-week average observed £": hi,
+            "bends upwards over": where,
+        }
+    return pd.DataFrame.from_dict(rows, orient="index")
