@@ -48,3 +48,49 @@ Append-only, newest entry at the bottom. One entry per run, written by Claude Co
 3. Marginal ROI (+10% spend) is not in the comparison row yet; I plan to add it in step 3 when response curves exist, rather than wait for step 6. Say if you want it earlier.
 
 **Next:** Step 2 (trend, seasonality, list price vs promo depth; decide lagged sales vs adstock). Run: `pip install -r requirements.txt && pip install -e . && pytest && python scripts/run_part2.py`.
+
+## 2026-11-16 · Steps 2–3 · controls, then carry-over and saturation
+*(Step 2 and the step-3 plan were written and committed before any step-3 code; step-3 results follow below the plan.)*
+
+### Step 2 – controls
+**Done:** `features.py` (trend, Fourier seasonality, regular price, promo depth), `candidates.py` (a `Config` per candidate; ladder M1–M5), `results/part2/step2_controls.md` (13 one-change alternatives around M5). Media and lagged sales unchanged from part 1 in this step, so every change is attributable to one control.
+
+**Decisions:**
+- *Linear trend (in years)* — the largest single gain: hold-out MAPE 11.4% → 7.6%, and the price coefficient gets the right sign (+0.02 → −0.61). A slope change after year 1 is not significant (p 0.4) and pushes VIF to 53: rejected.
+- *Seasonality = 2 annual sine/cosine pairs + January dummy.* The seasonal swing is small (about ±4%) but cuts hold-out error 7.0% → 4.8% and the worst fold 10.0% → 5.5%; BIC is indifferent (−363.0 vs −363.4), so this is decided by forecast error. January: +6.5% (HAC p 0.005), a New-Year effect that fits a high-protein brand. Christmas weeks: −5% but only 6 observations and no gain once January is in: not kept. 1 pair and 3 pairs are both worse out of sample.
+- *Price = log regular price + promo depth*, replacing average price + promo flag. Regular price = the shelf price seen in non-promo weeks (it rises in steps: £1.35 → 1.45 in Sep 2022 → 1.55 in Apr 2023 → ~1.60 in 2024), carried into promo weeks; promo depth = log(regular / paid) in promo weeks, 0 otherwise (mean 0.28 ≈ 24% off). The two are uncorrelated (r 0.04) and the price/promo VIF problem disappears. Honest caveats: (i) part 1's price pair fits marginally better (AIC −414.5 vs −412.1, hold-out 4.4% vs 4.8%) but its promo flag then has the wrong sign and VIF 13, and the dashboard needs "shelf price" and "promo depth" as separate levers, so I keep the split; (ii) regular price moved only four times and always upwards, so it is collinear with the trend (r 0.94, VIF 10.8): the elasticity (−0.78 short-run) is identified from four steps and its interval is wide (HAC se 0.20; −0.76 to −0.95 across folds). Dropping it costs 1.2 points of hold-out MAPE, so it stays.
+- *Post-promotion dip (last week's promo depth): kept, and it changes the reading of carry-over.* Coefficient −0.205 (HAC p < 0.001), AIC −389 → −412. With lagged sales at 0.58, a promotion's implied carry-over is 0.45 × 0.58 − 0.205 ≈ +0.06, i.e. nil. Lagged sales was carrying promo spikes into the next week, which the data reject: promotions lift the week they run and nothing after.
+- *Lagged sales stays for step 2 only.* Dropping it with media still un-lagged wrecks the model (AIC −412 → −131, autocorrelated residuals), so media carry-over is real and large; but M5's Breusch-Godfrey p of 0.007 says one shared carry-over rate does not fit. Step 3 tests replacing it with per-channel adstock; the two will not be used together unless the data insist (checked below).
+
+**Results:** [model_comparison.md](../../results/part2/model_comparison.md) · [step2_controls.md](../../results/part2/step2_controls.md) · [M5_january.md](../../results/part2/candidates/M5_january.md)
+- M0 → M5: AIC −350.7 → −412.1, BIC −323.3 → −363.4, hold-out MAPE 11.4% → 4.8%, rolling 9.9% → 5.0%; residual drift by year gone (−2.1/+2.8% → within ±0.2%).
+- Growth +8.0% a year at constant price and media; regular-price elasticity −0.78 short-run; a 24%-off promotion lifts that week's units by about 13% short-run.
+- Media coefficients and ROIs barely move (influencer 38.0, TikTok 23.2, Instagram 17.6, POS 5.3, TV 0.92 above floor). The controls were not what made them implausible; the media specification is.
+
+### Step 3 – plan (before coding)
+Media enters as `beta_c × f(adstock(spend_c; decay_c); scale_c)` in the log-sales regression, on top of M5's controls. Every `f` is 0 at zero spend, so TV's off-air weeks need no log(x+1): an off-air week simply has whatever adstock is left from the last flight. Adstock is normalised (constant spend X → adstock X) so scales stay in £/week.
+
+*Stage A – carry-over* (curve fixed at log(1 + adstock/scale), scale = mean weekly spend, TV: mean on-air spend; 0 extra parameters for the curve):
+| candidate | carry-over | extra params |
+|---|---|---|
+| A0 = M5 | lagged sales, log(spend+1) | 0 |
+| A1 | one decay for all channels, no lagged sales | 1 |
+| A2 | three decays: TV / social (Instagram, TikTok, influencer) / POS | 3 |
+| A3 | one decay per channel | 5 |
+| A4 | best of A1–A3 **plus** lagged sales | +0 (check only: if adstock has done the job, lagged sales ≈ 0) |
+
+Decay grid 0 to 0.9 in steps of 0.1 (0.5 = half the effect left after 1 week, 0.8 after 3 weeks, 0.9 after 6–7). Expectation: TV 0.3–0.8, social 0–0.6, POS 0–0.3. I search the whole grid and do not clamp; an estimate at the edge or against expectation is reported as a finding, not hidden.
+
+*Stage B – saturation*, at the decay structure that wins stage A (decays re-tuned jointly with the curve):
+| candidate | curve | extra params |
+|---|---|---|
+| B1 | log(1 + a/scale), scale re-tuned | +1 TV scale, +1 shared always-on scale |
+| B2 | Hill with slope 1: a/(a + scale) | same |
+| B3 | negative exponential: 1 − exp(−a/scale) | same |
+| B4 | TV as on-air flag + log(spend) on air, no adstock (the "two-part" answer to the zeros) | TV: 0 nonlinear, 1 more coefficient |
+
+Scale grid = {0.25, 0.5, 1, 2, 4} × mean spend. TV ranges from 0 to £376k, so its curvature should be identifiable. The always-on channels move only ±20–30% around their mean, so I expect their scale to be nearly unidentified (flat likelihood); if so it is fixed by convention at the mean and the response curve outside the observed range is labelled as assumption. I will show the likelihood profile either way.
+
+*Budget:* M5 has 16 parameters; the largest step-3 candidate has 15 regression coefficients + up to 7 grid-chosen ones = 22 on 155 weeks. Every grid-chosen parameter counts as one parameter in AIC/BIC.
+*No peeking:* decays and scales are re-selected inside each hold-out fold on the training weeks only.
+*Also:* marginal ROI (+10% spend, revenue at actual prices) joins the comparison row; the post-promo term and seasonality are re-tested once lagged sales is gone.
