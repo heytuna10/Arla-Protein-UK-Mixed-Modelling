@@ -28,6 +28,10 @@ class Config:
     shape: str = "log"                 # saturation curve: "log" | "hill" | "negexp" | "power"
     scale: dict = field(default_factory=dict)       # channel -> £/week at which the curve bends
     tv_two_part: bool = False          # TV as on-air flag + log(spend) when on air (no adstock)
+    # synergies beyond the multiplicative structure: "tv:influencer", "tv:social",
+    # "influencer:social", "pos:promo" (social = Instagram + TikTok)
+    interactions: tuple[str, ...] = ()
+    centre: dict = field(default_factory=dict)      # channel -> £/week at which interaction factors are centred
     n_extra_params: int = 0            # decay/saturation parameters chosen by grid search
     y_transform: str = "log"
 
@@ -70,6 +74,32 @@ def media_response(cfg: Config, data: pd.DataFrame, channel: str) -> np.ndarray:
     return saturate(a, cfg.shape, cfg.scale[channel])
 
 
+def interaction_columns(cfg: Config, data: pd.DataFrame, media: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Interaction regressors from the transformed media variables.
+
+    Each media factor is centred at its value for the channel's average spend, so a main
+    effect keeps its meaning ("effect when the partner channel is at its average level") and
+    the interaction coefficient reads as: does the effect of A get larger when B is above average?
+    Promo depth is not centred (0 = no promotion).
+    """
+    c = {ch: float(saturate(np.array([cfg.centre[ch]]), cfg.shape, cfg.scale[ch])[0]) for ch in media}
+    m = {ch: media[ch] - c[ch] for ch in media}
+    social = m.get("instagram", 0) + m.get("tiktok", 0)
+    out = {}
+    for name in cfg.interactions:
+        if name == "tv:influencer":
+            out["ix_tv_influencer"] = m["tv"] * m["influencer"]
+        elif name == "tv:social":
+            out["ix_tv_social"] = m["tv"] * social
+        elif name == "influencer:social":
+            out["ix_influencer_social"] = m["influencer"] * social
+        elif name == "pos:promo":
+            out["ix_pos_promo"] = m["pos_promotion"] * promo_depth(data).to_numpy()
+        else:
+            raise ValueError(name)
+    return out
+
+
 def build(cfg: Config, data: pd.DataFrame) -> pd.DataFrame:
     X = build_controls(cfg, data)
     for ch in CHANNELS:
@@ -81,6 +111,9 @@ def build(cfg: Config, data: pd.DataFrame) -> pd.DataFrame:
             X["tv_log_spend_on_air"] = np.where(on, np.log(data[ch].where(on, 1.0) / cfg.scale[ch]), 0.0)
         else:
             X[ch] = media_response(cfg, data, ch)
+    if cfg.interactions:
+        for name, col in interaction_columns(cfg, data, {ch: X[ch].to_numpy() for ch in CHANNELS if ch in X}).items():
+            X[name] = col
     return X
 
 

@@ -23,6 +23,11 @@ All candidates: dependent variable log weekly units, same 155 weeks (first week 
 | M12_negexp_scales | 23 | 0.977 | 0.974 | -495.2 | -425.2 | 4.31 | 3.86 | 3.95 | 6.04 |
 | M13_tv_two_part | 21 | 0.969 | 0.966 | -455.6 | -391.7 | 4.80 | 4.59 | 4.53 | 6.05 |
 | M14_hill | 22 | 0.977 | 0.974 | -497.3 | -430.3 | 4.22 | 3.79 | 3.88 | 5.89 |
+| M15_tv_x_influencer | 23 | 0.977 | 0.974 | -495.3 | -425.3 | 4.21 | 3.80 | 3.96 | 5.89 |
+| M16_tv_x_social | 23 | 0.977 | 0.974 | -495.6 | -425.6 | 4.36 | 3.80 | 4.29 | 5.85 |
+| M17_influencer_x_social | 23 | 0.977 | 0.975 | -497.5 | -427.5 | 4.39 | 3.72 | 3.92 | 5.75 |
+| M18_pos_x_promo | 23 | 0.977 | 0.975 | -497.1 | -427.1 | 4.50 | 4.10 | 3.96 | 6.11 |
+| M19_all_synergies | 26 | 0.978 | 0.974 | -493.8 | -414.7 | 4.68 | 4.20 | 4.36 | 5.93 |
 
 Hold-out = last 26 weeks, model trained on the weeks before. MAPE on units. The main figure is a multi-week forecast: actual spend and price are known, sales are not, so a model with lagged sales has to feed its own forecasts back in (what the dashboard will do). '1 week ahead' uses last week's actual sales and is shown only for comparison with part 1. Rolling = mean over 4 expanding-window folds of 13 weeks (training ends at week 104, 117, 130, 143).
 
@@ -47,6 +52,11 @@ Benchmarks without a model on the same hold-out: same week last year 26.6%, mean
 | M12_negexp_scales | 2.08 | 0.760 | 0.575 | 0.375 | 0.227 | 11.0 | trend | yes |
 | M13_tv_two_part | 2.05 | 0.444 | 0.241 | 0.357 | 0.186 | 11.1 | trend | yes |
 | M14_hill | 2.10 | 0.689 | 0.562 | 0.378 | 0.279 | 11.0 | trend | yes |
+| M15_tv_x_influencer | 2.10 | 0.690 | 0.577 | 0.385 | 0.268 | 11.2 | trend | yes |
+| M16_tv_x_social | 2.09 | 0.692 | 0.531 | 0.461 | 0.269 | 11.0 | trend | yes |
+| M17_influencer_x_social | 2.07 | 0.806 | 0.390 | 0.490 | 0.197 | 11.1 | trend | yes |
+| M18_pos_x_promo | 2.09 | 0.688 | 0.713 | 0.542 | 0.302 | 11.1 | trend | yes |
+| M19_all_synergies | 1.98 | 0.870 | 0.561 | 0.746 | 0.548 | 11.4 | trend | yes |
 
 p-values below 0.05 flag a problem (autocorrelation, heteroskedasticity, non-normal residuals). Durbin-Watson is biased towards 2 when lagged sales is a regressor; Breusch-Godfrey is the valid test there.
 
@@ -73,6 +83,11 @@ Contributions are Shapley values on counterfactual sales paths, so base + channe
 | M12_negexp_scales | 21.1 | 0.98 | 18.60 | 16.69 | 42.82 | 3.69 |
 | M13_tv_two_part | 21.8 | 0.85 | 17.40 | 17.41 | 43.03 | 3.91 |
 | M14_hill | 20.8 | 0.99 | 18.58 | 16.90 | 42.81 | 3.67 |
+| M15_tv_x_influencer | 20.8 | 0.99 | 18.60 | 16.93 | 42.78 | 3.67 |
+| M16_tv_x_social | 21.0 | 0.96 | 18.58 | 16.80 | 42.95 | 3.68 |
+| M17_influencer_x_social | 22.9 | 1.02 | 18.30 | 16.06 | 41.01 | 3.82 |
+| M18_pos_x_promo | 21.2 | 1.00 | 18.65 | 16.88 | 42.84 | 3.39 |
+| M19_all_synergies | 25.7 | 1.10 | 17.88 | 15.19 | 38.95 | 3.52 |
 
 **Marginal ROI** (£ revenue per extra £ when the channel's spend is raised 10% in every week; TV: on-air weeks).
 
@@ -93,6 +108,11 @@ Contributions are Shapley values on counterfactual sales paths, so base + channe
 | M12_negexp_scales | 1.83 | 30.89 | 24.67 | 74.65 | 5.50 |
 | M13_tv_two_part | 1.50 | 31.58 | 29.65 | 83.44 | 6.53 |
 | M14_hill | 1.72 | 30.82 | 24.80 | 74.55 | 5.47 |
+| M15_tv_x_influencer | 1.72 | 30.84 | 24.83 | 74.66 | 5.46 |
+| M16_tv_x_social | 1.72 | 30.97 | 24.82 | 74.70 | 5.48 |
+| M17_influencer_x_social | 1.74 | 31.24 | 24.82 | 75.30 | 5.62 |
+| M18_pos_x_promo | 1.71 | 30.74 | 24.59 | 74.02 | 5.28 |
+| M19_all_synergies | 1.96 | 30.51 | 23.86 | 72.03 | 5.29 |
 
 **Sensitivity: reference = zero spend for every channel** (extrapolates outside the data for the always-on channels).
 
@@ -113,3 +133,8 @@ Contributions are Shapley values on counterfactual sales paths, so base + channe
 | M12_negexp_scales | 0.3 | 0.52 | 10.42 | 9.78 | 16.66 | 2.60 |
 | M13_tv_two_part | 0.8 | 0.47 | 9.72 | 9.91 | 17.34 | 2.57 |
 | M14_hill | 0.1 | 0.50 | 10.59 | 10.19 | 15.96 | 2.77 |
+| M15_tv_x_influencer | 0.1 | 0.50 | 10.59 | 10.20 | 15.95 | 2.77 |
+| M16_tv_x_social | 0.1 | 0.49 | 10.60 | 10.17 | 16.00 | 2.78 |
+| M17_influencer_x_social | 1.1 | 0.51 | 10.60 | 9.97 | 15.55 | 2.88 |
+| M18_pos_x_promo | 0.1 | 0.50 | 10.64 | 10.20 | 16.05 | 2.66 |
+| M19_all_synergies | 3.5 | 0.56 | 10.47 | 9.40 | 15.09 | 2.85 |

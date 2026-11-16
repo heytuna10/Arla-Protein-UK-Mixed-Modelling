@@ -12,7 +12,7 @@ from itertools import product
 import numpy as np
 import pandas as pd
 
-from .candidates import Config, build_controls, make_spec
+from .candidates import Config, build_controls, interaction_columns, make_spec
 from .data import CHANNELS
 from .engine import LAG_COL, SAMPLE_START
 from .features import adstock, saturate
@@ -36,6 +36,7 @@ class Search:
     decay_grid: tuple[float, ...] = DECAY_GRID
     scale_grid: tuple[float, ...] = SCALE_GRID
     base_scale: dict = field(default_factory=dict)
+    exhaustive: bool = True            # False: always use the coordinate search (same optimum here, much faster)
 
     @property
     def n_params(self) -> int:
@@ -49,7 +50,8 @@ class _Problem:
         self.cfg, self.search, self.data = cfg, search, data
         self.rows = np.arange(SAMPLE_START, len(data) if end is None else end)
         Z = build_controls(cfg, data).astype(float)
-        z = np.log(data["sales_units"].to_numpy(dtype=float))
+        z = data["sales_units"].to_numpy(dtype=float)
+        z = z if cfg.y_transform == "level" else np.log(z)
         if cfg.lag_y:
             Z[LAG_COL] = pd.Series(z, index=data.index).shift(1)
         self.fixed_media = [ch for ch in CHANNELS if ch == "tv" and cfg.tv_two_part]
@@ -65,12 +67,17 @@ class _Problem:
     def _resid(self, v):
         return v - self.Q @ (self.Q.T @ v)
 
+    def raw(self, ch: str, decay: float, mult: float) -> np.ndarray:
+        key = ("raw", ch, decay, mult)
+        if key not in self._cache:
+            a = adstock(self.data[ch], decay)
+            self._cache[key] = saturate(a, self.cfg.shape, mult * self.search.base_scale[ch])
+        return self._cache[key]
+
     def column(self, ch: str, decay: float, mult: float) -> np.ndarray:
         key = (ch, decay, mult)
         if key not in self._cache:
-            a = adstock(self.data[ch], decay)
-            col = saturate(a, self.cfg.shape, mult * self.search.base_scale[ch])
-            self._cache[key] = self._resid(col[self.rows])
+            self._cache[key] = self._resid(self.raw(ch, decay, mult)[self.rows])
         return self._cache[key]
 
     def assignment(self, values: tuple) -> tuple[dict, dict]:
@@ -85,7 +92,13 @@ class _Problem:
 
     def ssr(self, values: tuple) -> float:
         decay, mult = self.assignment(values)
-        M = np.column_stack([self.column(ch, decay.get(ch, 0.0), mult[ch]) for ch in self.channels])
+        cols = [self.column(ch, decay.get(ch, 0.0), mult[ch]) for ch in self.channels]
+        if self.cfg.interactions:
+            scale = {ch: mult[ch] * self.search.base_scale[ch] for ch in CHANNELS}
+            raw = {ch: self.raw(ch, decay.get(ch, 0.0), mult[ch]) for ch in self.channels}
+            ix = interaction_columns(self.cfg.with_(scale=scale), self.data, raw)
+            cols += [self._resid(v[self.rows]) for v in ix.values()]
+        M = np.column_stack(cols)
         beta, *_ = np.linalg.lstsq(M, self.y, rcond=None)
         r = self.y - M @ beta
         return float(r @ r)
@@ -97,7 +110,7 @@ def tune(cfg: Config, search: Search, data: pd.DataFrame, end: int | None = None
     grids = [search.decay_grid] * len(search.decay_groups) + [search.scale_grid] * len(search.scale_groups)
     size = int(np.prod([len(g) for g in grids])) if grids else 1
 
-    if size <= EXHAUSTIVE_LIMIT:
+    if search.exhaustive and size <= EXHAUSTIVE_LIMIT:
         best = min(product(*grids), key=prob.ssr)
     else:
         # coordinate search from several starting points; each pass optimises one group at a time

@@ -21,6 +21,7 @@ import pandas as pd
 _TRANSFORMS = {
     "log1p": (np.log1p, np.expm1),
     "log": (np.log, np.exp),
+    "level": (lambda v: np.asarray(v, dtype=float) if np.ndim(v) else float(v), lambda v: v),   # additive model
 }
 
 

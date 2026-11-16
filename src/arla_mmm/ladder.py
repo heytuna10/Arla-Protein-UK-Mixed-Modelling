@@ -46,6 +46,32 @@ def step3_ladder(data: pd.DataFrame) -> list[ModelSpec]:
     return [tuned_spec(cfg, search, data) for cfg, search in defs]
 
 
+# Pre-declared synergy tests (step 4), each with its business story.
+SYNERGIES = {
+    "tv:influencer": ("M15_tv_x_influencer", "TV makes the brand familiar, so influencer posts convert better while TV is on air"),
+    "tv:social": ("M16_tv_x_social", "TV drives search and social traffic, so paid Instagram/TikTok works harder during flights"),
+    "influencer:social": ("M17_influencer_x_social", "influencer content is amplified by paid Instagram/TikTok on the same platforms"),
+    "pos:promo": ("M18_pos_x_promo", "in-store displays make a price promotion more visible, so the discount lifts more"),
+}
+
+
+def final_config(data: pd.DataFrame) -> tuple[Config, Search]:
+    """The chosen specification (M14) and its search; interaction centres set for step 4."""
+    bs = base_scales(data)
+    cfg = M5.with_(name=CHOSEN, media="response", shape="hill", scale=bs, lag_y=True,
+                   centre={ch: float(data[ch].mean()) for ch in CHANNELS})
+    return cfg, Search(base_scale=bs, decay_groups=PER_CHANNEL, scale_groups=(("tv",),), exhaustive=False)
+
+
+def step4_ladder(data: pd.DataFrame) -> list[ModelSpec]:
+    cfg, search = final_config(data)
+    specs = [tuned_spec(cfg.with_(name=name, interactions=(key,), description=f"M14 + {key.replace(':', ' × ')}: {story}"),
+                        search, data) for key, (name, story) in SYNERGIES.items()]
+    specs.append(tuned_spec(cfg.with_(name="M19_all_synergies", interactions=tuple(SYNERGIES),
+                                      description="M14 + all four interactions"), search, data))
+    return specs
+
+
 def step3_variants(data: pd.DataFrame) -> list[ModelSpec]:
     """One change at a time around the chosen model (not rows of the main comparison)."""
     bs = base_scales(data)
