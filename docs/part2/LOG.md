@@ -159,3 +159,38 @@ Scale grid = {0.25, 0.5, 1, 2, 4} × mean spend. TV ranges from 0 to £376k, so 
 **Next:** Step 6 (decomposition over time, ROI and marginal ROI with intervals, response curves, break-even margin, promotion and price insights, figures), then step 7 and its checkpoint.
 
 *Correction to the first slide bullet above:* across the sub-period fits influencer ROI ranges from 38.9 to 45.6, so the bullet should read "within 39–46".
+
+## 2026-11-16 · Steps 6–7 · contributions and ROI with intervals, scenarios, recommendation
+*(No new BRIEF decisions were available; Jakob told me to choose the next steps. I went ahead with the defaults I proposed at checkpoint 5: coefficient simulation for intervals, no Bayesian appendix, promotions reported including the dip after. All three are easy to revisit.)*
+
+**Done:** `final.py` (final model + 2,000 coefficient draws from the Newey-West covariance, vectorised same-shocks simulation), `insights.py`, `scenarios.py`, `figures.py`, `scripts/run_insights.py` (about 30 seconds; run `scripts/run_part2.py` first), `tests/test_final.py` (18 tests pass). `features.py` now accepts `regular_price` and `promo_depth` given directly, which the dashboard interface will need. Outputs: `step6_contributions_roi.md`, `step7_scenarios.md`, `decomposition_weekly.csv`, `response_curves.csv`, `scenario_plans.csv`, 8 figures in `results/part2/figures/`.
+
+**Decisions:**
+- *Intervals = 5–95% range over coefficient draws, decays and scales fixed.* They are narrow (influencer ROI 41.4–44.3) and cover estimation noise only. On every table and chart I say so, because the real uncertainty is elsewhere (next point).
+- ***Differs from brief (important): I do not recommend the "observed weekly range" plan as the main scenario, and I added a ±10% plan as the headline.*** The weekly range is not the range the model has evidence for. Its long-run effect needs a spend level to be *held*, and held levels have barely moved: the highest 13-week average of influencer spend ever observed is 11% above its mean (Instagram 25%, TikTok 43%, POS 15%), although single weeks reached +80%. The observed-weekly-range plan holds influencer at 75% above 2024 all year and the model answers with +283% revenue. ±20% gives +65%, ±10% gives +30%. I computed all three as the brief asks, added a range check per plan (`step7_scenarios.md`), and recommend ±10% as "first step, run as a test".
+- *Even the ±10% number should not go on a slide as a forecast.* +£15m (+30%) from moving £0.3m is simply the marginal ROIs (influencer ≈ £75 per £) applied to a sustained shift and compounded by the multiplicative form. The data support the direction and the ranking very robustly; they cannot show that a response measured on week-to-week wiggles holds when the level is raised and kept. I wrote the recommendation as: direction → first step ±10% → measure → scale. My suggestion is to show the allocation chart and the ROI chart on the slides and to quote the revenue gain only as "model-implied upper bound".
+- *Scenarios are a replay of 2024, not a forward forecast:* same weeks, prices, promotions and shocks, only media changes. Why: it isolates the media decision, needs no assumptions about 2025 prices or promotions, and reproduces actual 2024 revenue exactly for the unchanged plan. Spill-over into 2025 is not counted for any scenario. The forward-looking version is the dashboard's job (step 8).
+- *Plans keep each week's place in the 2024 pattern* and move it between a lower and an upper bound (one number per channel), TV within its flight calendar and capped at its observed maximum, as decided in §7. The optimiser hits the bounds as predicted: TV to its lower bound, Instagram/TikTok/influencer to their upper bound in every plan; POS is the swing channel.
+- *Decomposition chart = stacked columns per quarter, not a weekly stacked area.* 155 weekly points × 8 layers is unreadable at slide size; the weekly series is in the CSV. Price promotions and growth since Jan 2022 are separate layers (Shapley over seven drivers); seasonality and price level stay in the base because their reference level would be arbitrary and their contribution changes sign.
+- *Response curves show sustained spend levels* with two shaded ranges (seen in single weeks / held for a quarter) and a thick line only where the model has evidence, to make the point above visible.
+
+**Results:** [step6_contributions_roi.md](../../results/part2/step6_contributions_roi.md) · [step7_scenarios.md](../../results/part2/step7_scenarios.md) · figures: `roi.png`, `decomposition.png`, `response_curves.png`, `model_ladder.png`, `fit_holdout.png`, `allocation.png`, `scenarios.png`, `promotions.png`
+- ROI above floor (5–95%): influencer 42.8 (41.4–44.3), Instagram 18.6 (16.7–20.5), TikTok 16.9 (15.6–18.2), POS 3.7 (2.8–4.5), TV 0.99 (0.94–1.05). Marginal ROI: 74.6, 30.8, 24.8, 5.5, 1.72. Break-even margin on the next £: TV 58%, POS 18%, social and influencer 1–4%.
+- Sales split 2022–24: base incl. minimum media 17%, growth 8%, price promotions 3%, POS 5%, TV 7%, Instagram 15%, TikTok 16%, influencer 30%.
+- Price promotions (board metric b): +6.2% units, **−3.7% revenue** (−£5.2m over three years, about £100k per promotion week). A 24%-off week sells +17% units in total but needs +32% to hold revenue; no depth pays for itself.
+- Shelf price (board metric c): total elasticity −0.76 (−1.15 to −0.37); a 5% price rise gives −3.6% units and +1.2% revenue (−0.8% to +3.1%).
+- Scenarios, revenue against the 2024 plan (£50.5m): ±10% plan +£15.4m, ±20% +£33.1m, observed weekly range +£143m, 10% of TV to influencer +£24.8m, budget −10% optimised +£8.9m, budget +10% optimised +£38.0m. All beyond the sustained range for influencer; only the ±10% plan is close to it (9% above).
+- TV and in-store (the board's question): TV is 39% of spend for 7% of sales and returns about £1 of revenue per £; it is cut first in every plan. POS spend earns its keep (ROI 3.7) but ranks fourth. Price promotions cost revenue.
+
+**For the slides:**
+- "Shift budget from TV towards influencers, Instagram and TikTok: every model version and every scenario agrees on the direction."
+- "First step: 10% out of TV, 10% more on each of the three social channels, same total budget, run as a measured test. The model's numbers beyond that are extrapolation: we have never held influencer spend more than 11% above its average for a quarter."
+- "Price promotions add 6% volume and cost 4% of revenue. They are the first in-store lever to test, ahead of POS spend."
+
+**Open questions:**
+1. (important) Do you accept ±10% as the headline plan and the wording "model-implied upper bound" for its revenue number, with the observed-weekly-range plan shown only as an illustration of extrapolation? This reverses the §7 decision on which scenario is "main".
+2. Should the slides quote any revenue gain at all? My view: show direction, allocation and ROI, quote the gain once with the caveat, and make the recommended test the conclusion.
+3. For step 8, the dashboard will produce the same very large numbers whenever a user raises social spend. I propose that the interface returns an out-of-range flag based on the 13-week average (not the weekly range) and that INTERFACE.md tells the dashboard team to display it prominently. OK?
+4. Still open from checkpoint 5: Bayesian appendix yes/no.
+
+**Next:** Step 8 (model interface for the dashboard, INTERFACE.md, `notebooks/02_model_extension.ipynb`, SUMMARY.md, pull request) after the planning side has reviewed this checkpoint.

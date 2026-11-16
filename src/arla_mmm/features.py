@@ -9,6 +9,8 @@ ORIGIN = pd.Timestamp("2022-01-03")       # first week of the data; trend is mea
 
 def trend_years(data: pd.DataFrame) -> pd.Series:
     """Years since the first week (so the coefficient is growth per year in log points)."""
+    if "trend_override" in data.columns:          # counterfactuals ("no growth since the first week")
+        return data["trend_override"].astype(float)
     return (data["week_beg"] - ORIGIN).dt.days / 365.25
 
 
@@ -30,6 +32,8 @@ def regular_price(data: pd.DataFrame, window: int = 5) -> pd.Series:
     that rises in steps). In promo weeks it is not observed, so it is filled from the
     neighbouring non-promo weeks, and a centred median over `window` weeks removes the pence noise.
     """
+    if "regular_price" in data.columns:           # given directly (scenarios, dashboard plans)
+        return data["regular_price"].astype(float)
     shelf = data["avg_price"].where(data["price_promo"] == 0)
     shelf = shelf.interpolate(method="nearest", limit_direction="both") if shelf.notna().sum() > 1 else shelf
     shelf = shelf.ffill().bfill()
@@ -41,6 +45,8 @@ def promo_depth(data: pd.DataFrame) -> pd.Series:
 
     0.25 means the average price paid was about 22% below the shelf price.
     """
+    if "promo_depth" in data.columns:             # given directly (scenarios, dashboard plans)
+        return data["promo_depth"].astype(float)
     depth = np.log(regular_price(data) / data["avg_price"])
     return depth.where(data["price_promo"] == 1, 0.0).clip(lower=0.0)
 
