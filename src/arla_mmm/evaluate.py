@@ -139,6 +139,21 @@ def evaluate(spec: ModelSpec, data: pd.DataFrame | None = None, write: bool = Tr
     return result
 
 
+def variants_table(specs: list[ModelSpec], data: pd.DataFrame) -> pd.DataFrame:
+    """Key numbers for side experiments that do not get a row in the main comparison."""
+    rows = []
+    for spec in specs:
+        r = evaluate(spec, data, write=False)["row"]
+        rows.append(
+            {
+                "variant": spec.name, "params": r["k"], "AIC": r["aic"], "BIC": r["bic"],
+                "hold-out MAPE %": r["ho26_mape"], "rolling MAPE %": r["cv_mape"], "worst fold %": r["cv_mape_worst"],
+                "Breusch-Godfrey p": r["bg4_p"], "max VIF": r["max_vif"], "media ≥ 0": r["media_signs_ok"],
+            }
+        )
+    return pd.DataFrame(rows).set_index("variant")
+
+
 # ---------------------------------------------------------------- reporting
 
 def _fmt(v, nd=2) -> str:

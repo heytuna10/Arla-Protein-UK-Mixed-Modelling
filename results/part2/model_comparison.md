@@ -9,6 +9,11 @@ All candidates: dependent variable log weekly units, same 155 weeks (first week 
 | model | params | R² | adj R² | AIC | BIC | hold-out MAPE % | hold-out MAPE % (1 week ahead) | rolling MAPE % | worst fold % |
 |---|---|---|---|---|---|---|---|---|---|
 | M0_baseline | 9 | 0.930 | 0.926 | -350.7 | -323.3 | 11.38 | 7.48 | 9.86 | 12.56 |
+| M1_trend | 10 | 0.942 | 0.939 | -379.6 | -349.2 | 7.62 | 5.91 | 7.96 | 10.95 |
+| M2_season | 14 | 0.948 | 0.943 | -386.5 | -343.9 | 5.05 | 5.49 | 6.44 | 8.40 |
+| M3_price | 14 | 0.947 | 0.942 | -384.9 | -342.3 | 5.30 | 5.65 | 6.22 | 7.33 |
+| M4_postpromo | 15 | 0.955 | 0.950 | -406.9 | -361.2 | 4.90 | 5.01 | 5.27 | 6.05 |
+| M5_january | 16 | 0.957 | 0.952 | -412.1 | -363.4 | 4.83 | 4.98 | 4.97 | 5.48 |
 
 Hold-out = last 26 weeks, model trained on the weeks before. MAPE on units. The main figure is a multi-week forecast: actual spend and price are known, sales are not, so a model with lagged sales has to feed its own forecasts back in (what the dashboard will do). '1 week ahead' uses last week's actual sales and is shown only for comparison with part 1. Rolling = mean over 4 expanding-window folds of 13 weeks (training ends at week 104, 117, 130, 143).
 
@@ -19,6 +24,11 @@ Benchmarks without a model on the same hold-out: same week last year 26.6%, mean
 | model | Durbin-Watson | Breusch-Godfrey p (4) | Ljung-Box p (13) | Breusch-Pagan p | Jarque-Bera p | max VIF | on | media ≥ 0 in all fits |
 |---|---|---|---|---|---|---|---|---|
 | M0_baseline | 1.89 | 0.131 | 0.443 | 0.582 | 0.644 | 5.5 | price_promo | yes |
+| M1_trend | 2.04 | 0.512 | 0.623 | 0.994 | 0.644 | 13.1 | avg_price | yes |
+| M2_season | 2.22 | 0.180 | 0.428 | 0.996 | 0.376 | 13.3 | avg_price | yes |
+| M3_price | 2.21 | 0.128 | 0.401 | 0.991 | 0.408 | 10.6 | trend | yes |
+| M4_postpromo | 2.28 | 0.021 | 0.187 | 0.896 | 0.689 | 10.7 | trend | yes |
+| M5_january | 2.27 | 0.007 | 0.137 | 0.938 | 0.361 | 10.8 | trend | yes |
 
 p-values below 0.05 flag a problem (autocorrelation, heteroskedasticity, non-normal residuals). Durbin-Watson is biased towards 2 when lagged sales is a regressor; Breusch-Godfrey is the valid test there.
 
@@ -31,9 +41,19 @@ Contributions are Shapley values on counterfactual sales paths, so base + channe
 | model | base % of sales | TV | Instagram | TikTok | Influencer | POS |
 |---|---|---|---|---|---|---|
 | M0_baseline | 18.5 | 0.97 | 17.43 | 20.18 | 39.80 | 5.25 |
+| M1_trend | 19.3 | 0.97 | 16.91 | 21.43 | 38.58 | 4.74 |
+| M2_season | 19.0 | 0.95 | 17.64 | 21.64 | 38.15 | 4.66 |
+| M3_price | 19.0 | 0.96 | 17.65 | 21.90 | 38.15 | 4.47 |
+| M4_postpromo | 16.2 | 0.99 | 17.77 | 23.33 | 38.43 | 4.99 |
+| M5_january | 16.9 | 0.92 | 17.64 | 23.15 | 38.00 | 5.26 |
 
 **Sensitivity: reference = zero spend for every channel** (extrapolates outside the data for the always-on channels).
 
 | model | base % of sales | TV | Instagram | TikTok | Influencer | POS |
 |---|---|---|---|---|---|---|
 | M0_baseline | 0.0 | 0.37 | 9.31 | 11.62 | 10.75 | 6.57 |
+| M1_trend | 0.0 | 0.36 | 9.36 | 11.70 | 10.82 | 6.44 |
+| M2_season | 0.0 | 0.36 | 9.38 | 11.71 | 10.83 | 6.42 |
+| M3_price | 0.0 | 0.36 | 9.40 | 11.74 | 10.85 | 6.37 |
+| M4_postpromo | 0.0 | 0.39 | 9.30 | 11.62 | 10.74 | 6.54 |
+| M5_january | 0.0 | 0.36 | 9.30 | 11.62 | 10.74 | 6.60 |
