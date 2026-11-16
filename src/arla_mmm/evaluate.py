@@ -18,7 +18,7 @@ from statsmodels.stats.diagnostic import acorr_breusch_godfrey, acorr_ljungbox, 
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.stats.stattools import durbin_watson, jarque_bera
 
-from .contributions import reference_levels, roi_table
+from .contributions import marginal_roi, reference_levels, roi_table
 from .data import CHANNELS, RESULTS_DIR, load_data
 from .engine import LAG_COL, Fit, fit, one_step, simulate
 from .spec import ModelSpec
@@ -69,6 +69,8 @@ def residual_patterns(f: Fit, data: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
 
 def holdout(spec: ModelSpec, data: pd.DataFrame, origin: int, horizon: int) -> dict:
     """Train on weeks < origin, forecast weeks origin..origin+horizon-1."""
+    if spec.refit is not None:          # re-select decay/saturation on the training weeks only
+        spec = spec.refit(data, origin)
     f = fit(spec, data, end=origin)
     rows = np.arange(origin, origin + horizon)
     actual = data["sales_units"].to_numpy(dtype=float)[rows]
@@ -79,6 +81,7 @@ def holdout(spec: ModelSpec, data: pd.DataFrame, origin: int, horizon: int) -> d
         "rmse_dyn": _rmse(actual, dyn),
         "mape_1step": _mape(actual, one),
         "params": f.params,
+        "config": spec.config,
     }
 
 
@@ -108,6 +111,17 @@ def evaluate(spec: ModelSpec, data: pd.DataFrame | None = None, write: bool = Tr
 
     roi_floor = roi_table(f, data, "floor")
     roi_zero = roi_table(f, data, "zero")
+    mroi = marginal_roi(f, data)
+    roi_floor["marginal_roi"] = mroi
+    tuned = None
+    cfg = spec.config
+    if cfg is not None and getattr(cfg, "media", "") == "response":
+        tuned = {
+            "decay": pd.DataFrame({ch: {**{f"train<{o}": fo["config"].decay.get(ch, 0.0) for o, fo in zip(CV_ORIGINS, folds)},
+                                        "full": cfg.decay.get(ch, 0.0)} for ch in CHANNELS}),
+            "scale": pd.DataFrame({ch: {**{f"train<{o}": fo["config"].scale[ch] for o, fo in zip(CV_ORIGINS, folds)},
+                                        "full": cfg.scale[ch]} for ch in CHANNELS}),
+        }
 
     row = {
         "model": spec.name,
@@ -131,8 +145,10 @@ def evaluate(spec: ModelSpec, data: pd.DataFrame | None = None, write: bool = Tr
         "sum_check_pct": roi_floor.attrs["sum_check_pct"],
         **{f"roi_{ch}": roi_floor.loc[ch, "roi"] for ch in CHANNELS},
         **{f"roi0_{ch}": roi_zero.loc[ch, "roi"] for ch in CHANNELS},
+        **{f"mroi_{ch}": mroi[ch] for ch in CHANNELS},
     }
-    result = {"row": row, "fit": f, "roi_floor": roi_floor, "roi_zero": roi_zero, "fold_params": all_fits}
+    result = {"row": row, "fit": f, "roi_floor": roi_floor, "roi_zero": roi_zero, "fold_params": all_fits,
+              "tuned": tuned, "search_record": getattr(spec, "search_record", None)}
     if write:
         _write_detail(result, data)
         _update_comparison(row, data)
@@ -192,6 +208,36 @@ def _write_detail(result: dict, data: pd.DataFrame) -> Path:
         }
     )
     roi_cols = ["reference_spend", "incremental_spend", "pct_of_sales", "incremental_revenue", "roi", "last_in_roi"]
+    roi_cols_main = roi_cols + ["marginal_roi"]
+    tuned_parts = []
+    if result.get("tuned"):
+        tuned_parts = [
+            "## Carry-over and saturation parameters (full sample and re-tuned per training window)",
+            "",
+            "Decay = share of the media effect that carries into the next week.",
+            "",
+            md_table(result["tuned"]["decay"].rename_axis("sample"), nd=1),
+            "",
+            "Scale of the saturation curve, £ per week.",
+            "",
+            md_table(result["tuned"]["scale"].rename_axis("sample"), nd=0),
+            "",
+        ]
+    if result.get("search_record") and result["search_record"]["profiles"]:
+        prof = pd.DataFrame(result["search_record"]["profiles"]).T
+        prof = prof[sorted(prof.columns)]
+        prof.columns = [str(c) for c in prof.columns]
+        dec = prof.loc[[i for i in prof.index if i.startswith("decay")]].dropna(axis=1, how="all")
+        sca = prof.loc[[i for i in prof.index if i.startswith("scale")]].dropna(axis=1, how="all")
+        tuned_parts += [
+            "Likelihood profiles: AIC penalty for moving one parameter away from its best value, others held "
+            "(0 = best; below about 2 = the data cannot tell the values apart).",
+            "",
+        ]
+        if len(dec):
+            tuned_parts += [md_table(dec.rename_axis("decay value →"), nd=1), ""]
+        if len(sca):
+            tuned_parts += [md_table(sca.rename_axis("scale × mean spend →"), nd=1), ""]
     roi_nd = {"reference_spend": 0, "incremental_spend": 0, "pct_of_sales": 1, "incremental_revenue": 0}
     parts = [
         f"# {row['model']}",
@@ -208,6 +254,7 @@ def _write_detail(result: dict, data: pd.DataFrame) -> Path:
         "",
         md_table(result["fold_params"].rename_axis("sample"), nd=3),
         "",
+        *tuned_parts,
         "## Residual patterns (mean residual in %, positive = model too low)",
         "",
         md_table(residual_patterns(f, data)[0], nd=1),
@@ -220,7 +267,10 @@ def _write_detail(result: dict, data: pd.DataFrame) -> Path:
         f"{result['roi_floor'].attrs['sum_check_pct']:.2f}% of actual sales "
         f"(largest weekly gap {result['roi_floor'].attrs['max_abs_weekly_gap']:.3f} units).",
         "",
-        md_table(result["roi_floor"][roi_cols].rename_axis("channel"), nd=roi_nd),
+        md_table(result["roi_floor"][roi_cols_main].rename_axis("channel"), nd=roi_nd),
+        "",
+        "`roi` = Shapley share of incremental revenue / spend above the reference; `last_in_roi` = revenue lost if only "
+        "this channel is cut to its reference; `marginal_roi` = revenue per extra £ for +10% spend in every week.",
         "",
         "## Sensitivity – reference: zero spend for every channel",
         "",
@@ -272,6 +322,7 @@ def render_comparison(table: pd.DataFrame, data: pd.DataFrame) -> str:
     roi0_tab = t[["base_pct_zero"] + [f"roi0_{c}" for c in CHANNELS]].rename(
         columns={"base_pct_zero": "base % of sales", **{f"roi0_{c}": short[c] for c in CHANNELS}}
     )
+    mroi_tab = t[[f"mroi_{c}" for c in CHANNELS]].rename(columns={f"mroi_{c}": short[c] for c in CHANNELS})
     floor_txt = ", ".join(f"{short[c]} £{ref[c]:,.0f}" for c in CHANNELS)
     return "\n".join(
         [
@@ -315,6 +366,10 @@ def render_comparison(table: pd.DataFrame, data: pd.DataFrame) -> str:
             "ROI = incremental revenue / spend above the floor.",
             "",
             md_table(roi_tab, nd={"base % of sales": 1}),
+            "",
+            "**Marginal ROI** (£ revenue per extra £ when the channel's spend is raised 10% in every week; TV: on-air weeks).",
+            "",
+            md_table(mroi_tab),
             "",
             "**Sensitivity: reference = zero spend for every channel** (extrapolates outside the data for the always-on channels).",
             "",

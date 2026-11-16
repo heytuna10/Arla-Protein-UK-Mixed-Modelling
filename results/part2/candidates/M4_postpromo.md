@@ -61,13 +61,15 @@ n = 155, parameters = 15, R² = 0.955, AIC = -406.9, BIC = -361.2
 
 Base = 16.2% of sales; base + channels = 100.00% of actual sales (largest weekly gap 0.000 units).
 
-| channel | reference_spend | incremental_spend | pct_of_sales | incremental_revenue | roi | last_in_roi |
-|---|---|---|---|---|---|---|
-| tv | 0 | 9,310,186 | 7.0 | 9,212,228 | 0.99 | 1.91 |
-| instagram | 15,393 | 1,192,415 | 15.7 | 21,189,288 | 17.77 | 31.96 |
-| tiktok | 9,332 | 1,415,019 | 24.4 | 33,005,727 | 23.33 | 39.54 |
-| influencer | 13,406 | 1,021,938 | 29.1 | 39,277,488 | 38.43 | 62.88 |
-| pos_promotion | 17,791 | 2,008,661 | 7.5 | 10,022,253 | 4.99 | 9.63 |
+| channel | reference_spend | incremental_spend | pct_of_sales | incremental_revenue | roi | last_in_roi | marginal_roi |
+|---|---|---|---|---|---|---|---|
+| tv | 0 | 9,310,186 | 7.0 | 9,212,228 | 0.99 | 1.91 | 0.17 |
+| instagram | 15,393 | 1,192,415 | 15.7 | 21,189,288 | 17.77 | 31.96 | 32.42 |
+| tiktok | 9,332 | 1,415,019 | 24.4 | 33,005,727 | 23.33 | 39.54 | 38.09 |
+| influencer | 13,406 | 1,021,938 | 29.1 | 39,277,488 | 38.43 | 62.88 | 73.80 |
+| pos_promotion | 17,791 | 2,008,661 | 7.5 | 10,022,253 | 4.99 | 9.63 | 8.11 |
+
+`roi` = Shapley share of incremental revenue / spend above the reference; `last_in_roi` = revenue lost if only this channel is cut to its reference; `marginal_roi` = revenue per extra £ for +10% spend in every week.
 
 ## Sensitivity – reference: zero spend for every channel
 

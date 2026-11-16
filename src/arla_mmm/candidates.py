@@ -85,16 +85,15 @@ def build(cfg: Config, data: pd.DataFrame) -> pd.DataFrame:
 
 
 def make_spec(cfg: Config) -> ModelSpec:
-    spec = ModelSpec(
+    return ModelSpec(
         name=cfg.name,
         build=lambda data: build(cfg, data),
         lag_y=cfg.lag_y,
         y_transform=cfg.y_transform,
         n_extra_params=cfg.n_extra_params,
         description=cfg.description,
+        config=cfg,
     )
-    object.__setattr__(spec, "config", cfg)
-    return spec
 
 
 # ------------------------------------------------------------------ step 2: controls

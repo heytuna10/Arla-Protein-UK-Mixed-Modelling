@@ -32,6 +32,10 @@ class ModelSpec:
     y_transform: str = "log"         # "log" or "log1p"
     n_extra_params: int = 0          # nonlinear params chosen outside OLS (decay, saturation ...)
     description: str = ""
+    config: object = None            # the Config this spec was built from (if any)
+    # Optional: re-select grid-searched parameters on a training window.
+    # refit(data, end) -> ModelSpec tuned on weeks < end only. Used by the hold-out folds.
+    refit: Callable[[pd.DataFrame, int], "ModelSpec"] | None = None
 
     def z(self, sales):
         return _TRANSFORMS[self.y_transform][0](sales)

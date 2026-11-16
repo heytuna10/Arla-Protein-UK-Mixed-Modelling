@@ -108,3 +108,23 @@ def roi_table(f: Fit, data: pd.DataFrame, reference: str | dict[str, float] = "f
     out.attrs["sum_check_pct"] = dec.sum(axis=1).sum() / sales.sum() * 100
     out.attrs["max_abs_weekly_gap"] = float(np.abs(dec.sum(axis=1).to_numpy() - sales).max())
     return out
+
+
+def marginal_roi(f: Fit, data: pd.DataFrame, bump: float = 0.10) -> pd.Series:
+    """Revenue gained per extra £ when one channel's spend is raised by `bump` (10%) in every week.
+
+    Same weekly shocks and actual prices as the decomposition; carry-over included. For TV the
+    increase applies to on-air weeks only (10% of zero is zero). This is the number that matters
+    for reallocation: it values the next £, not the average £.
+    """
+    d = data.iloc[f.rows]
+    price = d["avg_price"].to_numpy()
+    sales = d["sales_units"].to_numpy()
+    shocks = f.res.resid.to_numpy()
+    out = {}
+    for ch in CHANNELS:
+        cf = data.copy()
+        cf[ch] = cf[ch] * (1 + bump)
+        gain = simulate(f.spec, f.params, cf, f.rows, shocks) - sales
+        out[ch] = (gain * price).sum() / (bump * d[ch].sum())
+    return pd.Series(out, name="marginal_roi")

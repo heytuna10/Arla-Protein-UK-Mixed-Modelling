@@ -14,6 +14,15 @@ All candidates: dependent variable log weekly units, same 155 weeks (first week 
 | M3_price | 14 | 0.947 | 0.942 | -384.9 | -342.3 | 5.30 | 5.65 | 6.22 | 7.33 |
 | M4_postpromo | 15 | 0.955 | 0.950 | -406.9 | -361.2 | 4.90 | 5.01 | 5.27 | 6.05 |
 | M5_january | 16 | 0.957 | 0.952 | -412.1 | -363.4 | 4.83 | 4.98 | 4.97 | 5.48 |
+| M6_adstock_1decay | 16 | 0.953 | 0.948 | -398.0 | -349.3 | 5.36 | 5.36 | 5.34 | 6.35 |
+| M7_adstock_3decays | 18 | 0.955 | 0.950 | -401.7 | -346.9 | 5.50 | 5.50 | 5.64 | 6.55 |
+| M8_adstock_5decays | 20 | 0.964 | 0.960 | -432.3 | -371.4 | 5.70 | 5.70 | 5.35 | 7.93 |
+| M9_adstock_lag | 21 | 0.975 | 0.972 | -485.6 | -421.6 | 4.49 | 4.10 | 4.24 | 6.27 |
+| M10_log_scales | 23 | 0.977 | 0.974 | -492.7 | -422.7 | 4.37 | 3.98 | 3.98 | 6.23 |
+| M11_hill_scales | 23 | 0.977 | 0.974 | -495.3 | -425.3 | 4.22 | 3.79 | 4.01 | 5.89 |
+| M12_negexp_scales | 23 | 0.977 | 0.974 | -495.2 | -425.2 | 4.31 | 3.86 | 3.95 | 6.04 |
+| M13_tv_two_part | 21 | 0.969 | 0.966 | -455.6 | -391.7 | 4.80 | 4.59 | 4.53 | 6.05 |
+| M14_hill | 22 | 0.977 | 0.974 | -497.3 | -430.3 | 4.22 | 3.79 | 3.88 | 5.89 |
 
 Hold-out = last 26 weeks, model trained on the weeks before. MAPE on units. The main figure is a multi-week forecast: actual spend and price are known, sales are not, so a model with lagged sales has to feed its own forecasts back in (what the dashboard will do). '1 week ahead' uses last week's actual sales and is shown only for comparison with part 1. Rolling = mean over 4 expanding-window folds of 13 weeks (training ends at week 104, 117, 130, 143).
 
@@ -29,6 +38,15 @@ Benchmarks without a model on the same hold-out: same week last year 26.6%, mean
 | M3_price | 2.21 | 0.128 | 0.401 | 0.991 | 0.408 | 10.6 | trend | yes |
 | M4_postpromo | 2.28 | 0.021 | 0.187 | 0.896 | 0.689 | 10.7 | trend | yes |
 | M5_january | 2.27 | 0.007 | 0.137 | 0.938 | 0.361 | 10.8 | trend | yes |
+| M6_adstock_1decay | 1.42 | 0.005 | 0.059 | 0.112 | 0.051 | 15.9 | trend | yes |
+| M7_adstock_3decays | 1.42 | 0.003 | 0.021 | 0.128 | 0.044 | 15.3 | trend | yes |
+| M8_adstock_5decays | 1.44 | 0.002 | 0.011 | 0.159 | 0.048 | 13.0 | trend | yes |
+| M9_adstock_lag | 2.05 | 0.788 | 0.696 | 0.284 | 0.214 | 11.2 | trend | yes |
+| M10_log_scales | 2.08 | 0.831 | 0.618 | 0.407 | 0.201 | 11.1 | trend | yes |
+| M11_hill_scales | 2.10 | 0.689 | 0.562 | 0.378 | 0.279 | 11.0 | trend | yes |
+| M12_negexp_scales | 2.08 | 0.760 | 0.575 | 0.375 | 0.227 | 11.0 | trend | yes |
+| M13_tv_two_part | 2.05 | 0.444 | 0.241 | 0.357 | 0.186 | 11.1 | trend | yes |
+| M14_hill | 2.10 | 0.689 | 0.562 | 0.378 | 0.279 | 11.0 | trend | yes |
 
 p-values below 0.05 flag a problem (autocorrelation, heteroskedasticity, non-normal residuals). Durbin-Watson is biased towards 2 when lagged sales is a regressor; Breusch-Godfrey is the valid test there.
 
@@ -46,6 +64,35 @@ Contributions are Shapley values on counterfactual sales paths, so base + channe
 | M3_price | 19.0 | 0.96 | 17.65 | 21.90 | 38.15 | 4.47 |
 | M4_postpromo | 16.2 | 0.99 | 17.77 | 23.33 | 38.43 | 4.99 |
 | M5_january | 16.9 | 0.92 | 17.64 | 23.15 | 38.00 | 5.26 |
+| M6_adstock_1decay | 20.0 | 1.16 | 18.72 | 17.45 | 40.32 | 4.23 |
+| M7_adstock_3decays | 20.6 | 1.16 | 18.30 | 18.39 | 40.49 | 3.29 |
+| M8_adstock_5decays | 22.7 | 1.22 | 19.31 | 14.34 | 41.91 | 3.14 |
+| M9_adstock_lag | 24.3 | 1.08 | 17.80 | 15.66 | 40.94 | 3.23 |
+| M10_log_scales | 21.9 | 1.00 | 18.36 | 16.53 | 42.34 | 3.54 |
+| M11_hill_scales | 20.8 | 0.99 | 18.58 | 16.90 | 42.81 | 3.67 |
+| M12_negexp_scales | 21.1 | 0.98 | 18.60 | 16.69 | 42.82 | 3.69 |
+| M13_tv_two_part | 21.8 | 0.85 | 17.40 | 17.41 | 43.03 | 3.91 |
+| M14_hill | 20.8 | 0.99 | 18.58 | 16.90 | 42.81 | 3.67 |
+
+**Marginal ROI** (£ revenue per extra £ when the channel's spend is raised 10% in every week; TV: on-air weeks).
+
+| model | TV | Instagram | TikTok | Influencer | POS |
+|---|---|---|---|---|---|
+| M0_baseline | 0.16 | 30.27 | 30.79 | 72.83 | 8.20 |
+| M1_trend | 0.16 | 28.86 | 32.41 | 68.90 | 7.26 |
+| M2_season | 0.16 | 30.38 | 32.92 | 68.38 | 7.16 |
+| M3_price | 0.16 | 30.41 | 33.38 | 68.42 | 6.86 |
+| M4_postpromo | 0.17 | 32.42 | 38.09 | 73.80 | 8.11 |
+| M5_january | 0.16 | 31.70 | 37.18 | 71.57 | 8.46 |
+| M6_adstock_1decay | 1.94 | 35.11 | 30.50 | 80.00 | 7.18 |
+| M7_adstock_3decays | 1.92 | 33.80 | 31.90 | 79.22 | 5.53 |
+| M8_adstock_5decays | 1.96 | 34.58 | 23.60 | 79.16 | 5.10 |
+| M9_adstock_lag | 1.63 | 31.02 | 25.41 | 74.98 | 5.17 |
+| M10_log_scales | 1.87 | 31.06 | 25.08 | 75.31 | 5.43 |
+| M11_hill_scales | 1.72 | 30.82 | 24.80 | 74.55 | 5.47 |
+| M12_negexp_scales | 1.83 | 30.89 | 24.67 | 74.65 | 5.50 |
+| M13_tv_two_part | 1.50 | 31.58 | 29.65 | 83.44 | 6.53 |
+| M14_hill | 1.72 | 30.82 | 24.80 | 74.55 | 5.47 |
 
 **Sensitivity: reference = zero spend for every channel** (extrapolates outside the data for the always-on channels).
 
@@ -57,3 +104,12 @@ Contributions are Shapley values on counterfactual sales paths, so base + channe
 | M3_price | 0.0 | 0.36 | 9.40 | 11.74 | 10.85 | 6.37 |
 | M4_postpromo | 0.0 | 0.39 | 9.30 | 11.62 | 10.74 | 6.54 |
 | M5_january | 0.0 | 0.36 | 9.30 | 11.62 | 10.74 | 6.60 |
+| M6_adstock_1decay | 0.6 | 0.64 | 10.05 | 9.79 | 16.41 | 2.72 |
+| M7_adstock_3decays | 0.7 | 0.64 | 10.02 | 10.31 | 16.74 | 2.18 |
+| M8_adstock_5decays | 0.9 | 0.68 | 10.63 | 8.54 | 17.61 | 2.10 |
+| M9_adstock_lag | 1.1 | 0.60 | 10.08 | 9.23 | 17.65 | 2.16 |
+| M10_log_scales | 0.1 | 0.49 | 10.61 | 10.22 | 15.98 | 2.74 |
+| M11_hill_scales | 0.1 | 0.50 | 10.59 | 10.19 | 15.96 | 2.77 |
+| M12_negexp_scales | 0.3 | 0.52 | 10.42 | 9.78 | 16.66 | 2.60 |
+| M13_tv_two_part | 0.8 | 0.47 | 9.72 | 9.91 | 17.34 | 2.57 |
+| M14_hill | 0.1 | 0.50 | 10.59 | 10.19 | 15.96 | 2.77 |
