@@ -61,6 +61,7 @@ The price paid is derived: `avg_price = regular_price × (1 − promo_discount)`
 
 | argument | default | meaning |
 |---|---|---|
+| `effects` | `"model"` | `"model"`: effects as estimated. `"benchmark"`: every channel's advertising effect fixed at the literature average, see "Two modes" below |
 | `n_draws` | 1000 | number of simulations (up to 2000). 1000 is plenty for the 5/50/95% bands |
 | `reference` | `"floor"` | what a channel's contribution is measured against, see "Contributions and ROI" |
 | `parameter_uncertainty`, `residual_uncertainty` | both `True` | switch off either source of uncertainty; with both off you get one deterministic path |
@@ -121,6 +122,23 @@ So a plan that sets influencer spend to £30k in every week passes the weekly ch
 
 `fc.warnings` gives the flags as ready sentences, sustained-level warnings first, for example: *"influencer: the 13-week average spend is up to 17% above the highest level ever held in the data (8 of 12 weeks). The model has no evidence here; read the result as extrapolation."* An empty list means the plan is inside the data. Note that a plan can become flagged as the horizon grows: in the first weeks the 13-week average still contains history, so a sustained increase of 10% may pass for 12 weeks and be flagged over a year. Our suggestion: a red banner when any `sustained_out` is true, a quieter note for `weekly_out`, and grey out or caveat the revenue numbers of a flagged scenario.
 
+## Two modes: show a range, not one number
+
+The estimated social and influencer effects are two to seven times larger than published studies find (`results/part2/step9_critical_review.md`). We cannot tell from this data how much of that is real, so the interface offers both ends:
+
+```python
+est, _ = compare_scenarios(model, plans, baseline="Current plan")                       # effects as estimated
+lit, _ = compare_scenarios(model, plans, baseline="Current plan", effects="benchmark")  # literature-sized effects
+```
+
+`effects="benchmark"` uses the same model re-estimated with every channel's long-term advertising elasticity fixed at 0.24, the average of published studies (`results/part2/step9_anchored.md`). Example, next 13 weeks, TV −10% and the three digital channels +10%: **+29% revenue as estimated, +4% at benchmark size.** The truth is most likely in between.
+
+Our suggestion for the app: show the gain of a scenario as that range ("+4% to +29%"), or offer a "conservative" toggle. Three things to know about the benchmark mode:
+
+- It fits the history much worse (forecast error on unseen weeks 12% against 4%), so its bands are about three times as wide and its level for the current plan differs somewhat. Use it for the *difference* between scenarios, and the default mode for the forecast of the current plan.
+- It is not conservative for TV: TV's estimated effect is half the literature average, so this mode doubles it. TV is still the weakest channel per £.
+- The out-of-range flags are the same in both modes.
+
 ## How good are the forecasts?
 
 Back-test (`results/part2/step8_interface_check.md`): four 12-week forecasts in 2024, each from a model that had only seen the earlier weeks, given the spend, prices and promotions that actually followed.
@@ -147,9 +165,10 @@ Example output for the next 12 weeks: same file, and `results/part2/figures/fore
 python scripts/run_part2.py       # model comparison, about 5 minutes
 python scripts/run_insights.py    # ROI, decomposition, 2024 scenarios, figures
 python scripts/run_interface.py   # saves models/arla_mmm_final.json, back-test, magnitude check
-pytest                            # 28 tests; one fails if the saved model is out of date
+python scripts/run_review.py      # critical-review diagnostics, benchmark-anchored regression
+pytest                            # 30 tests; one fails if the saved model is out of date
 ```
 
-To refit on new data, `fit_model(new_data)` followed by `save_model(model)`; `fit_model` re-selects the carry-over rates and fits the same specification. The model file is plain JSON (coefficients, their covariance, residual spread, the observed ranges), so it can be read without our code.
+To refit on new data, `fit_model(new_data)` followed by `save_model(model)`; `fit_model` re-selects the carry-over rates and fits the same specification. The model file is plain JSON (coefficients, their covariance, residual spread, the observed ranges, and the benchmark-sized parameter set), so it can be read without our code.
 
 What the model is and why: `results/part2/SUMMARY.md`; the full reasoning, step by step: `docs/part2/LOG.md`.

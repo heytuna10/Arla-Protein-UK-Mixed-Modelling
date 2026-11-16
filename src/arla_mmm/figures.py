@@ -278,3 +278,37 @@ def forecast_fan(history: pd.DataFrame, forecasts: dict[str, pd.DataFrame], week
            "Next 12 weeks after the data end. Bands cover coefficient and week-to-week uncertainty, "
            "not the risk of leaving the observed spend range.")
     return _save(fig, "forecast_example.png")
+
+
+def anchored(sweep: pd.DataFrame, benchmark: float, part1_error: float) -> Path:
+    """Benchmark-anchored regression: effect sizes and forecast error as the prior gets stronger."""
+    x = np.arange(len(sweep))
+    ticks = ["none"] + [i for i in sweep.index[1:-1]] + ["fixed"]
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(13.5, 5.6), gridspec_kw={"width_ratios": [1.15, 1], "wspace": 0.2})
+    for ch in CHANNELS:
+        y = sweep[f"elasticity {_lab(ch)}"].to_numpy()
+        a1.plot(x, y, color=COLOR[ch], linewidth=2, marker="o", markersize=4.5, label=NAME[ch])
+    a1.axhline(benchmark, color=INK2, linewidth=1.2, linestyle=(0, (4, 3)))
+    a1.text(x[0] - 0.1, benchmark + 0.035, f"literature average {benchmark}", color=INK2, fontsize=10.5, ha="left", va="bottom")
+    a1.set_ylim(0, None)
+    a1.set_ylabel("long-term advertising elasticity")
+    a1.legend(loc="upper right", fontsize=10.5)
+    a1.set_title("Effect sizes", fontsize=12.5, pad=8)
+    err = sweep["hold-out error %"].to_numpy()
+    a2.plot(x, err, color=INK, linewidth=2, marker="o", markersize=4.5)
+    a2.axhline(part1_error, color=INK2, linewidth=1.2, linestyle=(0, (4, 3)))
+    a2.text(x[0] - 0.1, part1_error - 0.25, f"part 1's model {part1_error:.1f}%", color=INK2, fontsize=10.5, ha="left", va="top")
+    for i in (0, len(x) - 1):
+        a2.annotate(f"{err[i]:.1f}%", (x[i], err[i]), textcoords="offset points", xytext=(0, 9), ha="center", fontsize=11)
+    a2.set_ylim(0, max(err.max(), part1_error) * 1.15)
+    a2.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.0f}%"))
+    a2.set_title("Forecast error on 26 unseen weeks", fontsize=12.5, pad=8)
+    for ax, label in ((a1, "how tightly effects are tied to the literature average (prior sd, % of benchmark)"), (a2, "same scale")):
+        ax.set_xticks(x, ticks, fontsize=8.5)
+        ax.grid(axis="x", visible=False)
+        ax.set_xlabel(label, fontsize=10)
+    fig.suptitle("The model can be forced to literature-sized effects, but then it stops forecasting",
+                 x=0.07, y=1.02, ha="left", fontsize=15, fontweight="semibold")
+    fig.text(0.07, 0.945, "Final model re-estimated with a prior on the five media effects, from no prior (left) to fixed at the benchmark (right).",
+             fontsize=11.5, color=INK2, ha="left")
+    return _save(fig, "anchored.png")

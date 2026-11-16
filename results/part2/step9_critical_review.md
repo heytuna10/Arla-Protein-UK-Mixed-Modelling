@@ -81,7 +81,9 @@ No regional data exist, so the test is over time, read against the model's forec
 6. **Cost of being wrong:** the only thing given up is 10% of TV, which the model values at 1.2% of sales (about £150k of revenue in a quarter).
 7. **Option:** raise the channels one after another (influencer first, eight weeks each) to read them separately. Influencer alone is detectable if the model is right (+15%), not if it is benchmark-sized (+2.4%).
 
-## Shrinkage towards plausible sizes: proposal (not built)
+## Shrinkage towards plausible sizes: proposal
+
+*Update: option A was built after this review was written. Results: `step9_anchored.md`, figure `figures/anchored.png`. Improvement 4 (the dashboard switch) exists as `forecast(..., effects="benchmark")`. The expectations below held.*
 
 **What to expect.** The estimates are very precise, so a prior only matters if it is strong. Example, influencer: coefficient 4.32, standard error 0.12. A prior centred on the benchmark-sized coefficient (0.62) with a standard deviation as large as its mean moves the estimate to about 4.2. To pull it halfway, the prior would have to claim the true value is known to within ±20% of the benchmark. In other words: with an honest prior nothing changes, with a strong prior we get the prior back. A posterior is therefore not the interesting output. The interesting output is **what it costs the model to be plausible**: how much fit and forecast accuracy are lost as the effects are forced towards the benchmark, and what the recommendation looks like there.
 

@@ -33,3 +33,18 @@ def test_profit_view_and_price_steps(m):
     assert p.loc["TV", "revenue per extra £ if the effect were benchmark-sized"] == p.loc["TV", "revenue per extra £"]
     steps = ins.price_steps(m)
     assert (steps["units per week"] < 0).all() and (steps["units p5"] < steps["units p95"]).all()
+
+
+def test_anchored_regression_ends(m):
+    import numpy as np
+    from arla_mmm import anchored as an
+    from arla_mmm.data import CHANNELS
+
+    target = an.benchmark_coefficients(m)
+    free = an.fit_anchored(m.spec, m.data, target, None, m.rows)
+    np.testing.assert_allclose(free.params.to_numpy(), m.fit.params.to_numpy(), rtol=1e-8)        # no prior = the final model
+    fixed = an.fit_anchored(m.spec, m.data, target, 0.0, m.rows)
+    np.testing.assert_allclose(fixed.params[CHANNELS].to_numpy(), target[CHANNELS].to_numpy())
+    tight = an.fit_anchored(m.spec, m.data, target, 1e-4, m.rows)
+    np.testing.assert_allclose(tight.params.to_numpy(), fixed.params.to_numpy(), rtol=1e-3)       # sweep converges to the fixed end
+    assert free.ssr < an.fit_anchored(m.spec, m.data, target, 0.25, m.rows).ssr < fixed.ssr

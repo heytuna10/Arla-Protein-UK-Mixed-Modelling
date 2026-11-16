@@ -257,3 +257,33 @@ Scale grid = {0.25, 0.5, 1, 2, 4} × mean spend. TV ranges from 0 to £376k, so 
 5. The pull request is still to be opened by Jakob (decided in §7).
 
 **Next:** Decisions on 1–3; then option A and the SUMMARY rewrite if agreed.
+
+## 2026-11-16 · Step 9 follow-up · SUMMARY rewritten, benchmark-anchored regression, benchmark mode in the interface
+*(Jakob asked in the session for next-step items 2–4 of my recommendation: rewrite SUMMARY.md, build shrinkage option A, and the dashboard switch. No BRIEF row exists yet for these three decisions; the planning side should add them.)*
+
+**Done:** `results/part2/SUMMARY.md` rewritten around the review. `src/arla_mmm/anchored.py` (closed-form regression with a prior on the five media coefficients), `results/part2/step9_anchored.md`, figure `anchored.png`, both built by `scripts/run_review.py`. `forecast(..., effects="benchmark")` and `compare_scenarios(..., effects="benchmark")` in the interface; the saved model `models/arla_mmm_final.json` now carries a second parameter set. INTERFACE.md section "Two modes", notebook section 8, 30 tests pass.
+
+**Decisions:**
+- *The prior ties all five channels to the benchmark, not only the three above it.* Why: choosing which channels to shrink after seeing the estimates would be picking the answer. It is also the harder test for our recommendation, because it doubles TV's effect while cutting digital. Consequence: numbers differ slightly from the review's arithmetic, which scaled digital only (+6% for the first-step plan there, +5% here).
+- *Prior strength = one number, the prior's standard deviation as a % of the benchmark-sized coefficient,* swept from none to fixed. Residual variance taken from the unrestricted fit; decays, curve scales and the prior's centre from the full sample. Rejected: ridge towards zero with cross-validated strength (would choose almost no penalty), a full Bayesian model (same answer expected, 1–1.5 days).
+- *Benchmark mode in the interface = the fixed end of the sweep,* stored in the model file with its own covariance and residual spread. Default stays `effects="model"`, so nothing changes for existing calls. I built it without the dashboard team's agreement because it is optional and off by default; they still need to decide how to show it.
+- *SUMMARY: the gain is now a range, and the order of the story changed.* New bullets 4–7 (sizes too large; what we tested; forced to literature sizes; profit) come before the recommendation. Synergy, carry-over and price moved to "Further findings". The +£15m appears once, as the upper end.
+
+**Results:** [step9_anchored.md](../../results/part2/step9_anchored.md) · [SUMMARY.md](../../results/part2/SUMMARY.md) · `figures/anchored.png`
+- A loose prior changes nothing: at ±100% influencer's long-term elasticity moves from 1.67 to 1.61. The influencer coefficient is measured to within 3%.
+- Plausible sizes have to be forced: fixed at the benchmark, R² falls from 0.977 to 0.770, AIC worsens by 346 points and the hold-out error rises from 4.2% to 12.2% (part 1's model: 11.4%).
+- Ranking digital > POS > TV at every strength. At the benchmark: revenue per extra £ of 9.1 (Instagram), 10.5 (influencer), 11.4 (TikTok), 6.9 (POS), 3.5 (TV). The order among the digital channels changes: TikTok leads from ±5% on.
+- First-step plan (TV −10%, digital +10%, 2024 replay): +30.5% revenue without a prior, +21% at ±25%, +12% at ±10%, +4.7% fixed at the benchmark.
+- Interface, next 13 weeks, same plan: +29% in model mode, +4% in benchmark mode. Benchmark-mode bands are about three times as wide.
+
+**For the slides:**
+- "We tied the model to the effect sizes the literature reports. It then forecasts three times worse, and it still says the same thing about where the next £ should go."
+- "The gain from the first step is somewhere between 5% and 30% of revenue. A 13-week test tells us where."
+
+**Open questions:**
+1. The dashboard team has to agree how to show the two modes (range per scenario, or a toggle). INTERFACE.md suggests the range.
+2. The benchmark mode is not conservative for TV (it doubles TV's effect). A "cap at benchmark" variant that leaves TV and POS as estimated would be more intuitive for a toggle labelled "conservative", but less principled. Say if you prefer it.
+3. The decision rule of the test uses +6% as the benchmark-sized uplift (review arithmetic); the anchored model gives +4–5%. I left the rule as is; the difference is inside the test's detection limit.
+4. The pull request is still to be opened on GitHub by Jakob; neither of us has `gh`.
+
+**Next:** PR and team review; dashboard team decides on the two modes; slides from the new SUMMARY.md.

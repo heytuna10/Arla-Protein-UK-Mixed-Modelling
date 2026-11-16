@@ -26,7 +26,7 @@ from .candidates import Config, make_spec
 from .data import CHANNELS, REPO_ROOT, load_data
 from .engine import LAG_COL, fit
 from .features import promo_depth, regular_price
-from .final import N_DRAWS, SEED
+from .final import N_DRAWS, SEED, FinalModel
 from .ladder import final_config
 from .spec import ModelSpec
 from .tune import tune
@@ -49,6 +49,9 @@ class SavedModel:
     sigma: float                     # residual standard deviation of weekly log sales
     ranges: dict                     # what the training data covered (used for the out-of-range flags)
     meta: dict = field(default_factory=dict)
+    # Second parameter set: the same model with the five media effects fixed at literature size
+    # (long-term elasticity 0.24 each; arla_mmm.anchored). {"params", "cov", "sigma"}; forecast(effects="benchmark").
+    benchmark: dict | None = None
 
     @property
     def spec(self) -> ModelSpec:
@@ -59,17 +62,30 @@ class SavedModel:
     def coef(self, name: str) -> float:
         return float(self.params[self.columns.index(name)])
 
-    def draws(self, n: int = N_DRAWS) -> np.ndarray:
-        """Coefficient draws (n x k); row 0 is the point estimate. Same seed and method as the
-        step-6 tables, so the first n rows are identical to the draws used there."""
-        if not hasattr(self, "_draws"):
+    def variant(self, effects: str = "model") -> tuple[np.ndarray, np.ndarray, float]:
+        """(params, cov, sigma) of the estimated model or of its benchmark-sized version."""
+        if effects == "model":
+            return self.params, self.cov, self.sigma
+        if effects == "benchmark":
+            if self.benchmark is None:
+                raise ValueError("this model file has no benchmark-sized parameter set; re-run scripts/run_interface.py")
+            b = self.benchmark
+            return np.asarray(b["params"]), np.asarray(b["cov"]), float(b["sigma"])
+        raise ValueError(f"effects must be 'model' or 'benchmark', not {effects!r}")
+
+    def draws(self, n: int = N_DRAWS, effects: str = "model") -> np.ndarray:
+        """Coefficient draws (n x k); row 0 is the point estimate. For effects="model": same seed and
+        method as the step-6 tables, so the first n rows are identical to the draws used there."""
+        cache = self.__dict__.setdefault("_draws", {})
+        if effects not in cache:
+            params, cov, _ = self.variant(effects)
             rng = np.random.default_rng(SEED)
-            d = rng.multivariate_normal(self.params, self.cov, size=N_DRAWS)
-            d[0] = self.params
-            self._draws = d
+            d = rng.multivariate_normal(params, cov, size=N_DRAWS, check_valid="ignore")
+            d[0] = params
+            cache[effects] = d
         if not 1 <= n <= N_DRAWS:
             raise ValueError(f"n_draws must be between 1 and {N_DRAWS}")
-        return self._draws[:n]
+        return cache[effects][:n]
 
 
 def _ranges(data: pd.DataFrame) -> dict:
@@ -96,8 +112,14 @@ def fit_model(data: pd.DataFrame | None = None) -> SavedModel:
     data = load_data() if data is None else data.reset_index(drop=True)
     cfg, search = final_config(data)
     cfg = tune(cfg, search, data)[0]
-    f = fit(make_spec(cfg), data)
+    spec = make_spec(cfg)
+    f = fit(spec, data)
+    # benchmark-sized version: media coefficients fixed where each channel's long-term elasticity is 0.24
+    from .anchored import benchmark_coefficients, fit_anchored          # (anchored imports scenarios -> final)
+    light = FinalModel(cfg, spec, f, data, f.params.to_numpy()[None, :])
+    b = fit_anchored(spec, data, benchmark_coefficients(light), 0.0, f.rows)
     return SavedModel(
+        benchmark={"params": b.params.to_numpy(), "cov": b.cov, "sigma": b.sigma},
         config=cfg, columns=list(f.X.columns), params=f.params.to_numpy(),
         cov=f.res_hac.cov_params().to_numpy(), sigma=float(np.sqrt(f.res.mse_resid)), ranges=_ranges(data),
         meta={"model": cfg.name, "first_week": str(data["week_beg"].iloc[0].date()),
@@ -112,7 +134,8 @@ def save_model(model: SavedModel, path: str | Path = MODEL_PATH) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"meta": model.meta, "config": asdict(model.config), "columns": model.columns,
                "params": model.params.tolist(), "cov": model.cov.tolist(), "sigma": model.sigma,
-               "ranges": model.ranges}
+               "ranges": model.ranges,
+               "benchmark": None if model.benchmark is None else {k: np.asarray(v).tolist() for k, v in model.benchmark.items()}}
     path.write_text(json.dumps(payload, indent=1) + "\n")
     return path
 
@@ -123,7 +146,8 @@ def load_model(path: str | Path = MODEL_PATH) -> SavedModel:
     for key in ("dummies", "interactions"):
         cfg[key] = tuple(cfg[key])
     return SavedModel(config=Config(**cfg), columns=p["columns"], params=np.array(p["params"]),
-                      cov=np.array(p["cov"]), sigma=p["sigma"], ranges=p["ranges"], meta=p["meta"])
+                      cov=np.array(p["cov"]), sigma=p["sigma"], ranges=p["ranges"], meta=p["meta"],
+                      benchmark=p.get("benchmark"))
 
 
 # ------------------------------------------------------------------ plans
@@ -293,7 +317,7 @@ def _summary(x: np.ndarray, prefix: str) -> dict:
 
 
 def forecast(model: SavedModel, plan: pd.DataFrame, history: pd.DataFrame | None = None, *,
-             n_draws: int = 1000, reference: str = "floor", parameter_uncertainty: bool = True,
+             n_draws: int = 1000, effects: str = "model", reference: str = "floor", parameter_uncertainty: bool = True,
              residual_uncertainty: bool = True, seed: int = SEED, tolerance: float = 0.0) -> Forecast:
     """Units and revenue for the weeks of `plan`, which follow directly after `history`.
 
@@ -303,6 +327,10 @@ def forecast(model: SavedModel, plan: pd.DataFrame, history: pd.DataFrame | None
               price_promo flag (then the average historical discount is used), week_beg.
     history   the weekly data up to now in the format of data/arla_protein_mmm_weekly.csv
               (default: that file). Needed for carry-over and for last week's sales.
+    effects   "model": the effects as estimated. "benchmark": the same model re-estimated with every channel's
+              advertising effect fixed at the literature average (long-term elasticity 0.24). The estimated
+              social and influencer effects are 2 to 7 times that, so the two modes bracket what a plan is
+              worth; the benchmark version fits the history much worse, so its bands are wider.
     reference what a channel's contribution is measured against in the plan weeks: "floor" (TV: zero;
               always-on channels: their lowest week in the training data, as in all part-2 tables) or "zero".
 
@@ -318,9 +346,10 @@ def forecast(model: SavedModel, plan: pd.DataFrame, history: pd.DataFrame | None
     rows = np.arange(len(h), len(frame))
     n = len(p)
 
-    draws = model.draws(n_draws) if parameter_uncertainty else np.repeat(model.params[None, :], n_draws, axis=0)
+    point, _, sigma = model.variant(effects)
+    draws = model.draws(n_draws, effects) if parameter_uncertainty else np.repeat(point[None, :], n_draws, axis=0)
     rng = np.random.default_rng(seed)
-    shocks = rng.normal(0.0, model.sigma, size=(n_draws, n)) if residual_uncertainty else np.zeros((n_draws, n))
+    shocks = rng.normal(0.0, sigma, size=(n_draws, n)) if residual_uncertainty else np.zeros((n_draws, n))
     exog = [c for c in model.columns if c != LAG_COL]
     ie = [model.columns.index(c) for c in exog]
     lam = draws[:, model.columns.index(LAG_COL)]

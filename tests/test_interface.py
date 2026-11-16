@@ -105,3 +105,16 @@ def test_plan_defaults_and_validation(model, base):
         forecast(model, base.assign(week_beg=base["week_beg"] + pd.Timedelta(days=7)))
     with pytest.raises(ValueError, match="promo_discount"):
         forecast(model, base.assign(promo_discount=24.0))
+
+
+def test_benchmark_mode(model, base):
+    plans = {"current": base, "shift": scale_plan(base, {"tv": 0.9, "instagram": 1.1, "tiktok": 1.1, "influencer": 1.1})}
+    est, _ = compare_scenarios(model, plans, baseline="current")
+    lit, fcs = compare_scenarios(model, plans, baseline="current", effects="benchmark")
+    assert 0 < lit.loc["shift", "delta_revenue_pct"] < est.loc["shift", "delta_revenue_pct"] / 3
+    w = fcs["current"].weekly
+    wide, narrow = w["units_p95"] / w["units_p5"], forecast(model, base).weekly.eval("units_p95 / units_p5")
+    assert (wide > narrow).all()                                   # the benchmark-sized model fits worse, so wider bands
+    assert load_model(MODEL_PATH).benchmark is not None
+    with pytest.raises(ValueError, match="effects"):
+        forecast(model, base, effects="other")
