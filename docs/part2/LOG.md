@@ -194,3 +194,34 @@ Scale grid = {0.25, 0.5, 1, 2, 4} × mean spend. TV ranges from 0 to £376k, so 
 4. Still open from checkpoint 5: Bayesian appendix yes/no.
 
 **Next:** Step 8 (model interface for the dashboard, INTERFACE.md, `notebooks/02_model_extension.ipynb`, SUMMARY.md, pull request) after the planning side has reviewed this checkpoint.
+
+## 2026-11-16 · Step 8 · dashboard interface, magnitude check, summary, notebook, hand-off
+**Done:** `src/arla_mmm/interface.py` (fit / save / load, `forecast`, `compare_scenarios`, `check_range`, plan helpers, `backtest`), the saved model `models/arla_mmm_final.json`, `docs/part2/INTERFACE.md`, `results/part2/SUMMARY.md`, `notebooks/02_model_extension.ipynb` (runs from a fresh kernel in about 10 seconds), `scripts/run_interface.py`, `insights.elasticities` and `insights.curve_shape`, three new figures (`scenarios_main.png`, `allocation_main.png`, `forecast_example.png`), `tests/test_interface.py` (25 tests pass in total), a part-2 section in the README, notebook packages pinned in `requirements.txt`. BRIEF decisions after checkpoint 7 committed; branch pushed.
+
+**Decisions:**
+- *Saved model = a JSON file, committed.* Coefficients, their Newey-West covariance, residual spread, the tuned decays and scales, and the observed ranges. Why: the app loads it in milliseconds without refitting, anyone can read it, and no pickle is involved. A test fails if the file no longer matches a fresh fit. Rejected: pickle (the spec holds a lambda; unsafe to share), refitting in the app (works, 1 second, but then the app depends on the tuning code).
+- *Plan inputs are shelf price and discount as two levers, not an average price.* That is how the model sees price; the paid price is derived. A 0/1 promo flag is accepted and uses the historical average discount (24%).
+- *Bands = coefficient draws + one normal shock per week.* Same draws and shocks for every plan of the same length, so scenario differences carry no simulation noise. Checked by a back-test (below), which is the evidence the bands are honest.
+- *Per-channel contributions in a forecast use the same definition as step 6* (Shapley against the floor, TV against zero) over the plan weeks only. What past spend still carries into the plan weeks is in the base, and effects after the last plan week are not counted, so a 12-week ROI is slightly below the historical one. Stated in INTERFACE.md.
+- *Flags as decided in §7*, plus two I added: shelf price and discount outside their observed ranges. Flags come back as a table and as ready sentences (`Forecast.warnings`). No tolerance by default; the step-7 tables used 2%, available as an option.
+- *`baseline_plan` = the same weeks one year earlier.* It keeps the TV flights and promotions in place and is inside the data by construction, so a user starts from an unflagged plan.
+- *Magnitude check: long-term elasticity = the effect of 1% more spend in every week of the history*, not the formula value at average spend. They agree for the always-on channels; for TV the history gives 0.12 and "held on air" would give 0.35. The first is what published studies measure, so it is the headline.
+- *Notebook shows the slide figures from `results/part2/figures/` and computes every table live.* Why: one set of figure files for slides and notebook, and the notebook stays small.
+
+**Results:** [SUMMARY.md](../../results/part2/SUMMARY.md) · [INTERFACE.md](INTERFACE.md) · [step8_magnitude_check.md](../../results/part2/step8_magnitude_check.md) · [step8_interface_check.md](../../results/part2/step8_interface_check.md)
+- Back-test, four 12-week forecasts in 2024 from models fitted on earlier weeks only: median forecast off by 4.0% on average, 44 of 48 actual weeks (92%) inside the 5–95% band, band about ±10%. One forecast (from July 2024) is weaker: 6.4%, 9 of 12 weeks inside.
+- Long-term elasticity against the benchmark of 0.24: TV 0.12, POS 0.20, TikTok 0.54, Instagram 0.83, influencer 1.67 (7 times). Short-term against 0.12: 0.05, 0.13, 0.35, 0.37, 0.64.
+- Curve shape: only influencer bends upwards over its whole observed range (TV below about £80k a week sustained). Its long-run coefficient implies sales × 816 at saturation against zero spend, the plainest sign of what the formula does outside the data.
+- Interface example, next 12 weeks: current plan £11.5m revenue (11.0–12.0); TV −10% / social +10% is credited with +£3.3m and raises no flag; 10% of TV to influencer with +£5.4m and is flagged in 8 of 12 weeks (13-week average 17% above anything held).
+
+**For the slides:**
+- "TV and in-store promotion respond the way the literature says advertising does. Social is two to three times that, influencers seven times: we trust the ranking and want to test the size."
+- "On weeks it had not seen, the model's 12-week forecast was off by 4% on average."
+
+**Open questions:**
+1. **(blocking the last item) The pull request is not open.** The GitHub CLI is not installed and I was not permitted to use the stored git credential with the GitHub API. Everything is pushed; Jakob needs to open the PR from the compare page (title and description are prepared) and ask Quentin to review. Not merged, as decided.
+2. The ±10% plan raises no flag in the 12-week interface example, while step 7 flagged influencer in the 2024 replay (9% above). Both are right: in the first weeks of a forecast the 13-week average still contains history. The dashboard team should know that a plan can become flagged as the horizon grows.
+3. A flagged plan still returns numbers. Should the interface refuse or cap them instead? I left the decision to the dashboard (INTERFACE.md suggests a red banner and greyed-out numbers).
+4. `CLAUDE.md` and `docs/part2/BRIEF.md` are part of the PR to `main`. Say if you would rather keep them off `main`.
+
+**Next:** Open the PR and get the team's review; agree the interface with the dashboard team and adjust it to what the app needs; slides from SUMMARY.md.
