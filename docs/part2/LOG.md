@@ -157,3 +157,5 @@ Scale grid = {0.25, 0.5, 1, 2, 4} × mean spend. TV ranges from 0 to £376k, so 
 3. For board metric (b), promotions: I will report the revenue effect of a typical promotion week including the dip the week after and the repeat-purchase effect, at the average depth (24% off) and as a curve over depth. OK?
 
 **Next:** Step 6 (decomposition over time, ROI and marginal ROI with intervals, response curves, break-even margin, promotion and price insights, figures), then step 7 and its checkpoint.
+
+*Correction to the first slide bullet above:* across the sub-period fits influencer ROI ranges from 38.9 to 45.6, so the bullet should read "within 39–46".

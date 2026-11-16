@@ -45,7 +45,7 @@ The same drivers in an additive model of units (no logs), decays re-tuned (tv 0.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | additive model in units (decays re-tuned) | 3,732.6 | 8.82 | 1.71 | 30.39 | 35.40 | 88.41 | 6.51 | 1.40 | 24.72 | 26.10 | 71.45 | 5.21 |
 
-On a common scale (likelihood of units) the final model's AIC is 3,633.8 against 3,732.6 for the additive model, and the additive hold-out error is 8.8%. The ROI columns are not like for like (in an additive model the average and the marginal return coincide up to saturation); the marginal ROIs are the comparable numbers.
+On a common scale (likelihood of units) the final model's AIC is 3,633.8 against 3,732.6 for the additive model, and the additive hold-out error is 8.8%. The above-floor ROI columns are not like for like (an additive model has no cross-channel amplification to share out between channels); the marginal ROIs are the comparable numbers, and they agree.
 
 ## 3. Stability over time
 
