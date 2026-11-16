@@ -287,3 +287,17 @@ Scale grid = {0.25, 0.5, 1, 2, 4} × mean spend. TV ranges from 0 to £376k, so 
 4. The pull request is still to be opened on GitHub by Jakob; neither of us has `gh`.
 
 **Next:** PR and team review; dashboard team decides on the two modes; slides from the new SUMMARY.md.
+
+## 2026-11-17 · Hand-over note · state of part 2 before the session was cleared
+**Done:** Nothing new built. Pull request #1 (`jakob_extension` → `main`) was opened by Jakob on GitHub and contains everything up to the entry above; it is not merged. From this commit on, commits carry no Claude co-author line (Jakob's standing preference, set globally); earlier commits were left as they are.
+
+**State:** Steps 0–9 are complete. 30 tests pass, the notebook runs from a fresh kernel, `results/part2/` is rebuilt by the four scripts in `scripts/` (run_part2, run_insights, run_interface, run_review). Start reading at `results/part2/SUMMARY.md`; the dashboard team starts at `docs/part2/INTERFACE.md`.
+
+**Open questions:**
+1. BRIEF §7 has no rows yet for three things Jakob decided in the session: the SUMMARY rewrite, the benchmark-anchored regression (all five channels tied to the benchmark), and `effects="benchmark"` in the interface.
+2. Dashboard: no branch exists on the remote (checked 17 Nov). I offered a starter Streamlit app on a separate branch off `jakob_extension` (inputs per channel, price and promotions; two or more scenarios against a baseline; bands; range warnings; gain shown as benchmark-to-model range; about 2–3 hours). Not started: it is the dashboard team's part, so Jakob asks them first, or says "build the starter".
+3. Dashboard team to decide: range per scenario or a toggle for the two modes; and whether a "cap digital only" variant is wanted, since the benchmark mode doubles TV's effect.
+4. Gross margin: the profit view uses an assumed 20–40%. Replace it if the codebook or the professor gives a number.
+5. The PR description still describes the state before step 9's follow-up in one place only if it was created from an older draft; check it mentions `step9_critical_review.md` and `step9_anchored.md`.
+
+**Next:** Team review of PR #1 and merge when nobody objects; slides from SUMMARY.md with Elvira; interface changes on the dashboard team's request; the starter app if agreed.
