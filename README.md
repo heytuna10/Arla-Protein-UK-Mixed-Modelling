@@ -9,8 +9,8 @@ Data: `data/arla_protein_mmm_weekly.csv`. Variables are described in [docs/part2
 | part | what | status |
 |---|---|---|
 | 1 | Baseline model and data preparation (`notebooks/01_exploratory_analysis.ipynb`) | done |
-| 2 | Model extension: final model, ROI with intervals, scenarios, critical review, interface for the dashboard | **done, in this branch** |
-| 3 | Scenario dashboard (Streamlit) | a starter exists on the branch `dashboard_starter`, not merged yet |
+| 2 | Model extension: final model, ROI with intervals, scenarios, critical review, interface for the dashboard | done |
+| 3 | Scenario dashboard (Streamlit) | starter merged, the dashboard team takes over (`app/`) |
 | 4–5 | Slides, pitch video | in progress |
 
 ## Part 2 in short
@@ -28,6 +28,8 @@ Full story: [results/part2/SUMMARY.md](results/part2/SUMMARY.md).
 - The story with charts, runnable: [notebooks/02_model_extension.ipynb](notebooks/02_model_extension.ipynb)
 - Model comparison (20 candidates): [results/part2/model_comparison.md](results/part2/model_comparison.md)
 - Critical review (what we can claim, profit view, test design): [results/part2/step9_critical_review.md](results/part2/step9_critical_review.md); literature-sized effects: [results/part2/step9_anchored.md](results/part2/step9_anchored.md)
+- Scenario dashboard (Streamlit starter): [app/README.md](app/README.md); run `streamlit run app/dashboard.py`
+- Map of the code in `src/arla_mmm/`: [docs/part2/ARCHITECTURE.md](docs/part2/ARCHITECTURE.md)
 - How the dashboard calls the model: [docs/part2/INTERFACE.md](docs/part2/INTERFACE.md)
 - Goals, steps and decisions: [docs/part2/BRIEF.md](docs/part2/BRIEF.md)
 - Every decision with its reason: [docs/part2/LOG.md](docs/part2/LOG.md)
@@ -36,12 +38,13 @@ Full story: [results/part2/SUMMARY.md](results/part2/SUMMARY.md).
 
 ```
 data/        the weekly dataset
+app/         Streamlit scenario dashboard (part 3 starter)
 src/arla_mmm/  the model package (data, features, engine, candidates, contributions, evaluate, final, insights, scenarios, review, interface, figures, ...)
 scripts/     run_*.py rebuild everything in results/part2/
 models/      the fitted final model (arla_mmm_final.json) that the dashboard loads
 notebooks/   01 = part 1 (Quentin), 02 = part 2 story
 results/part2/  tables (.md/.csv) and slide figures (figures/*.png)
-docs/part2/  brief, log, interface description
+docs/part2/  brief, log, interface description, code map
 tests/       pytest
 ```
 
@@ -53,6 +56,7 @@ Python ≥ 3.11 (built with 3.12).
 python3 -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -r requirements.txt && pip install -e .
 python scripts/run_part2.py && python scripts/run_insights.py && python scripts/run_interface.py && python scripts/run_review.py   # rebuilds results/part2/ (about 5 minutes, mostly the first script)
+streamlit run app/dashboard.py   # the scenario dashboard, opens at http://localhost:8501
 pytest
 ```
 
