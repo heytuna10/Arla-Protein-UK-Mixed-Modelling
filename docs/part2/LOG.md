@@ -349,3 +349,8 @@ Scale grid = {0.25, 0.5, 1, 2, 4} × mean spend. TV ranges from 0 to £376k, so 
 4. Still open from the first round: range or toggle, a simpler promotion control, an editable current plan, small multiples for three scenarios.
 
 **Next:** deploy (Jakob or Quentin), dashboard team review.
+
+## 2026-11-17 · Documentation · code map
+**Done:** `docs/part2/ARCHITECTURE.md`: one line per module of `src/arla_mmm/` in dependency order, the idea behind the `ModelSpec` design, and a "where do I look for…" table. No code changed.
+**Decisions:** One short page, no diagram files: the layer column in the table carries the dependency graph, which was read from the import lines.
+**Next:** unchanged (dashboard team review, deployment).
