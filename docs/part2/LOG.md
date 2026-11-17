@@ -301,3 +301,56 @@ Scale grid = {0.25, 0.5, 1, 2, 4} × mean spend. TV ranges from 0 to £376k, so 
 5. The PR description still describes the state before step 9's follow-up in one place only if it was created from an older draft; check it mentions `step9_critical_review.md` and `step9_anchored.md`.
 
 **Next:** Team review of PR #1 and merge when nobody objects; slides from SUMMARY.md with Elvira; interface changes on the dashboard team's request; the starter app if agreed.
+
+## 2026-11-17 · Dashboard starter · Streamlit app for part 3 on branch `dashboard_starter`
+*(Jakob said "build the starter". Branch `dashboard_starter` from `jakob_extension`; nothing committed to `jakob_extension` or `main`, no PR opened.)*
+
+**Done:** `app/dashboard.py` (one file, no model logic) and `app/README.md` (how to run). Interface additions in `src/arla_mmm/interface.py`: `gain_range()` and `media_roi_*` in `Forecast.totals` and in the `compare_scenarios` table, documented in INTERFACE.md. `streamlit==1.67.0` and `altair==6.3.0` pinned in `requirements.txt`. `tests/test_app.py` runs the app headless. 33 tests pass. Checked in a browser (headless Chromium): default view, a week edit, a slider move after the edit, an added promotion week, a shelf price of £1.90, reset, three scenarios over 52 weeks; no console errors.
+
+**What the app does:** current plan = `baseline_plan()` for 12–52 weeks. Two or three scenarios, each with a % slider per channel, a shelf price and an editable week table (spend, shelf price, promotion % off). Results: range warnings on top, the revenue gain per scenario as a range, totals (units, revenue, revenue per £ of advertising) with 5/50/95%, a weekly chart with bands, revenue added and ROI per channel, weekly table with CSV download.
+
+**Decisions:**
+- *Two interface additions instead of logic in the app.* `gain_range` runs both effect sizes and sorts the two ends: the benchmark is not always the lower one, since it doubles TV's effect (a TV +20% plan gains more at benchmark size; tested). `media_roi` is the scenario-level ROI with a band: revenue all channels add ÷ spend above the reference levels. Rejected: showing `revenue_per_media_pound` (no band, and it credits base sales to advertising).
+- *Levels and bands come from the model mode, the gain from both modes.* As INTERFACE.md recommends: the benchmark mode fits the history three times worse, so it is only used for the difference between scenarios.
+- *Default scenarios show both cases on opening:* "Shift to digital" (TV −10%, three digital channels +10%; inside the data at 12 weeks; +4% to +28%) and "TV to influencers" (the codebook's example as TV −10%, influencers +30%; red warning, influencer 16% above any level ever held; +3% to +46%).
+- *Sliders and week edits combine as "an edited cell wins".* The table shows the scaled plan; a cell the user edits keeps its value when a slider moves later. Rejected: sliders that rescale edited cells (surprising) and a table only (too slow for a CMO).
+- *Sustained flag = red box and "do not read as a forecast"; weekly-only flag = yellow box.* Flagged scenarios keep their numbers and carry a marker in every table, as decided in BRIEF §7.
+- *Altair for charts* (ships with Streamlit, so one dependency less than Plotly). *Words, not jargon:* "low / most likely / high", "revenue per £ of advertising", "study-sized effects".
+
+**Open questions (dashboard team):**
+1. Range or toggle for the two effect sizes? The app shows the range and both ends underneath.
+2. Budget-neutral moves: the sliders scale channels independently, so "10% of TV to influencers" is approximated (budget −£2k over 12 weeks). `shift_budget()` exists in the interface; a "move x% from A to B" control would use it.
+3. ROI of unchanged channels moves between scenarios (Instagram £20.7 → £27.4 per £ when only TV and influencers change), because channels amplify each other in the model. Correct, and it will be asked about: explain in the app or show ROI for the current plan only?
+4. Promotions are edited week by week in the table. Is a simpler control wanted (pick promotion weeks + one discount)?
+5. The current plan cannot be edited. Should it be (e.g. to load the real 2025 plan from a CSV)?
+6. Not built: profit view with a margin slider (break-even margins are in `step6_contributions_roi.md`), saving/loading scenarios, Arla styling, deployment (Streamlit Community Cloud would need the repo public or a token).
+7. With three scenarios the weekly chart has four overlapping bands; the sidebar has a switch to hide them. Small multiples may read better.
+
+**Next:** dashboard team takes over the branch (or copies `app/` into their own); interface changes on request.
+
+## 2026-11-17 · Dashboard, second round · help panel, exact budget move, profit view, deployment prepared
+*(Jakob's request in the session; still on `dashboard_starter`, no PR opened.)*
+
+**Done:** `app/dashboard.py`: (1) a help panel at the top for managers (inputs, how to read low/likely/high and the range, red and yellow warnings, "outside the data is not a forecast"); (2) a "move x% from channel A to channel B" control on `shift_budget()`, with the codebook's 10% of TV to influencers as a button and as the second default scenario; (3) a Profit tab with a margin slider (default 20%, labelled as an assumption), profit after advertising per scenario, profit added and break-even margin per channel; (4) one line under the channel ROI table, shown only when the ROI of a channel with unchanged spend moves; (5) deployment prepared for Streamlit Community Cloud (`.streamlit/config.toml`, a path fallback in the app, steps in `app/README.md`). Charts reworked: a range chart for the gain (ring = study-sized, dot = as measured), a hover line in the weekly chart, a break-even chart with the assumed margin as a line; results in four tabs. Interface: `profit_view()`, `profit_gain()`, validation in `shift_budget()`, `delta_spend` in the `gain_range` table; INTERFACE.md updated. 36 tests pass. Checked in a browser, and in a fresh environment installed from `requirements.txt` only (as the cloud does).
+
+**Decisions:**
+- *Profit = margin × revenue − media spend, nothing else deducted.* Other costs are not in the data; the app says so. The bands carry over from revenue; the margin is treated as known. Break-even margin = 1 / ROI, as in step 6, so the dots in the break-even chart do not move with the slider, only the line does.
+- *The budget move is applied after the channel sliders* and moves a share of the source channel's (scaled) budget, pro rata over the weeks, as `shift_budget()` does. Week edits still win. A move that cannot be done (same channel, no spend in the target) shows a note and changes nothing.
+- *Default scenario 2 is now the exact codebook example* (was TV −10% / influencers +30%): budget unchanged to the pound, +3% to +47%, red warning (influencer 17% above any level ever held).
+- *Deployment without touching the pins:* the app adds `src/` to the path when the package is not installed, so the cloud needs only the root `requirements.txt`. Rejected: `-e .` inside requirements.txt (changes everyone's local install) and a second requirements file in `app/` (two sets of pins to keep in step).
+- *Help text says "plan with the lower figure, treat the higher one as the upside".* That is a recommendation, not a model output; change it if the team disagrees.
+
+**Results:** next 12 weeks at a 20% margin: profit after advertising £0.41m (£0.31m to £0.51m) for the current plan; break-even margins TV 85%, in-store promotion 27%, Instagram 5%, TikTok 5%, influencers 2%. At 20%, TV and in-store promotion do not pay for themselves in the plan weeks; the three digital channels do.
+
+**Open questions:**
+1. Deployment needs a person in the browser, and probably admin rights on Quentin's repository (steps and the fallback in `app/README.md`). Which branch should the public app follow: `dashboard_starter` now, `main` after the merge?
+2. Default margin 20% is the low end of the 20–40% assumed in the critical review. Replace it if the codebook or the professor gives a number.
+3. The in-store promotion result at 20% (just below break-even) will draw questions; it flips to "pays back" at about 27%. Worth a sentence on the slide.
+4. Still open from the first round: range or toggle, a simpler promotion control, an editable current plan, small multiples for three scenarios.
+
+**Next:** deploy (Jakob or Quentin), dashboard team review.
+
+## 2026-11-17 · Documentation · code map
+**Done:** `docs/part2/ARCHITECTURE.md`: one line per module of `src/arla_mmm/` in dependency order, the idea behind the `ModelSpec` design, and a "where do I look for…" table. No code changed.
+**Decisions:** One short page, no diagram files: the layer column in the table carries the dependency graph, which was read from the import lines.
+**Next:** unchanged (dashboard team review, deployment).
